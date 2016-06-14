@@ -1,0 +1,87 @@
+{
+    "kind": "Template",
+    "apiVersion": "v1",
+    "metadata": {
+        "name": "swarm-s2i",
+        "annotations": {
+            "description": "Application template for the Swarm S2I Builder",
+            "iconClass": "icon-jboss",
+            "tags": "javaee,java,builder"
+        }
+    },
+    "objects": [
+        {
+           "kind": "ImageStream",
+           "apiVersion": "v1",
+           "metadata": {
+              "name": "swarm-centos"
+           },
+           "spec": {
+              "dockerImageRepository": "openshift/base-centos7"
+           }
+        },
+        {
+            "kind": "ImageStream",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "labels": {
+                    "application": "${APPLICATION_NAME}"
+                }
+            }
+        },
+        {
+            "kind": "BuildConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "labels": {
+                    "application": "${APPLICATION_NAME}"
+                }
+            },
+            "spec": {
+                "source": {
+                    "type": "Binary",
+                    "binary": {
+                        "asFile": ""
+                    }
+                },
+                "strategy": {
+                    "type": "Docker",
+                    "dockerStrategy": {
+                        "from": {
+                            "kind": "ImageStreamTag",
+                            "name": "swarm-centos:latest"
+                        }
+                    }
+                },
+                "output": {
+                    "to": {
+                        "kind": "ImageStreamTag",
+                        "name": "${APPLICATION_NAME}:latest"
+                    }
+                },
+                "triggers": [
+                    {
+                        "type": "ImageChange",
+                        "imageChange": {}
+                    },
+                    {
+                        "type": "ConfigChange"
+                    }
+                ]
+            }
+        }
+    ],
+    "parameters": [
+        {
+            "name": "APPLICATION_NAME",
+            "description": "The name for the application.",
+            "value": "swarm-s2i",
+            "required": true
+        }
+    ],
+    "labels": {
+        "template": "swarm-s2i"
+    }
+}

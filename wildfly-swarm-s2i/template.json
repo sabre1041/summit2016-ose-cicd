@@ -1,0 +1,57 @@
+{
+  "kind": "Template",
+  "apiVersion": "v1",
+  "metadata": {
+    "name": "wildfly-swarm-sti-template"
+  },
+  "objects": [
+    {
+      "kind": "ImageStream",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "wildflyswarm-10-centos7"
+      }
+    },
+    {
+      "kind": "BuildConfig",
+      "apiVersion": "v1",
+      "metadata": {
+        "name": "wildflyswarm-10-centos7-build"
+      },
+      "spec": {
+        "triggers": [
+          {
+            "type": "GitHub",
+            "github": {
+              "secret": "secret101"
+            }
+          }
+        ],
+        "source" : {
+          "type" : "Git",
+          "git" : {
+            "uri": "git://github.com/wildfly-swarm/sti-wildflyswarm.git"
+          },
+          "contextDir": "1.0"
+        },
+        "strategy": {
+          "type": "Docker",
+          "dockerStrategy": {
+            "env": [
+              {
+                "name": "IMAGE_NAME",
+                "value": "openshift/wildflyswarm-10-centos7"
+              }
+            ]
+          }
+        },
+        "output": {
+          "to": {
+            "kind": "ImageStreamTag",
+            "name": "wildflyswarm-10-centos7:latest"
+          }
+        }
+      }
+    }
+  ]
+}
