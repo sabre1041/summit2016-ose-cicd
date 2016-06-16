@@ -1,0 +1,62 @@
+#!/bin/bash
+
+# Source code provided to S2I is at ${HOME}
+LOCAL_SOURCE_DIR=${HOME}
+mkdir -p $LOCAL_SOURCE_DIR
+DEPLOY_DIR=/opt/openshift
+
+# the subdirectory within LOCAL_SOURCE_DIR from where we should copy build
+# artifacts (*.war, *.jar)
+ARTIFACT_DIR=${ARTIFACT_DIR:-target}
+
+# Copy the source for compilation
+cp -Rf /opt/s2i/destination/src/. $LOCAL_SOURCE_DIR
+chgrp -R 0 $LOCAL_SOURCE_DIR
+chmod -R g+rw $LOCAL_SOURCE_DIR
+
+function copy_artifacts() {
+  if [ -d $LOCAL_SOURCE_DIR/$1 ]; then
+    echo "Copying all JAR artifacts from $LOCAL_SOURCE_DIR/$1 directory into $DEPLOY_DIR for later deployment..."
+    cp -v $LOCAL_SOURCE_DIR/$1/*.jar $DEPLOY_DIR 2> /dev/null
+  fi
+}
+
+
+# If a pom.xml is present, this is a normal build scenario
+# so run maven.
+if [ -f "$LOCAL_SOURCE_DIR/pom.xml" ]; then
+  pushd $LOCAL_SOURCE_DIR &> /dev/null
+
+  if [ -z "$MAVEN_ARGS" ]; then
+    export MAVEN_ARGS="-U clean install -Popenshift -DskipTests"
+  fi
+  if [ -z "$MAVEN_ARGS_APPEND" ]; then
+    export MAVEN_ARGS="$MAVEN_ARGS $MAVEN_ARGS_APPEND"
+  fi
+  echo "Found pom.xml... attempting to build with 'mvn ${MAVEN_ARGS}'"
+
+  mvn --version
+  mvn $MAVEN_ARGS
+
+  ERR=$?
+  if [ $ERR -ne 0 ]; then
+    echo "Aborting due to error code $ERR from mvn package"
+    exit $ERR
+  fi
+  
+  copy_artifacts "$ARTIFACT_DIR" jar
+
+  popd &> /dev/null
+
+  # Blow away our maven repository so we don't bloat the resulting
+  # image with all our build dependencies
+  rm -rf ~/.m2/repository
+  
+elif [ -d $LOCAL_SOURCE_DIR/deployments ]; then
+  copy_artifacts "deployments"
+else
+  echo "Unable to determine source"
+  exit 1
+fi
+
+echo "...done"

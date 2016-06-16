@@ -6,7 +6,6 @@ RemoteSystemsTempFiles/
 *.zip
 repository/
 *.tar
-bin/
 .classpath
 .project
 .settings
