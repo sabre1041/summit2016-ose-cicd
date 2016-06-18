@@ -1,0 +1,56 @@
+node {
+    
+    env.KUBECONFIG = pwd() + "/.kubeconfig"
+    def infraProject = "swarm-infra"
+    def swarmBase = "swarm-s2i"
+    def WORKSPACE = pwd()
+    
+    stage 'Checkout'
+    
+      git url: "https://github.com/sabre1041/summit2016-ose-cicd.git"
+      
+    stage 'Update BuildConfig Version'
+      
+      def version = parseVersion("${WORKSPACE}/wildfly-swarm-s2i/version.txt")
+      
+      login()
+      
+      sh """
+       set +x 
+      
+       currentOutputName=\$(oc get bc ${swarmBase} -n ${infraProject} --template='{{ .spec.output.to.name }}')
+       
+       newImageName=\${currentOutputName%:*}:${version}
+       
+       oc patch bc ${swarmBase} -n ${infraProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
+       
+      """
+    stage "Build Image"
+    
+    
+      login()
+      
+      sh """
+        set +x
+        oc start-build ${swarmBase} -n ${infraProject} --follow=true --wait=true --from-dir="${WORKSPACE}/wildfly-swarm-s2i"
+      """
+    stage "Tag to OpenShift Project"
+      login()
+      
+      sh """
+        set +x
+        oc tag ${infraProject}/${swarmBase}:${version} openshift/${swarmBase}:${version}
+      """
+}
+
+def login() {
+    sh """
+       set +x
+       oc login --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt --token=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://kubernetes.default.svc.cluster.local >/dev/null 2>&1 || echo 'OpenShift login failed'
+       """
+}
+
+def parseVersion(String filename) {
+    def version = readFile(filename)
+    version.trim()
+}

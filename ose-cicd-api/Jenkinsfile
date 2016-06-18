@@ -1,0 +1,195 @@
+node {
+    
+    def WORKSPACE = pwd()
+    def mvnHome = tool 'maven'
+    env.KUBECONFIG = pwd() + "/.kubeconfig"
+    def appName = "swarm-app"
+    def devProject = "swarm-dev"
+    def qaProject = "swarm-qa"
+    def prodProject = "swarm-prod"
+   
+   stage 'Checkout'
+
+       git url: "https://github.com/sabre1041/summit2016-ose-cicd.git"
+
+   stage 'Maven Build'
+   
+        try {
+            sh """
+            set +x
+            cd ${WORKSPACE}/ose-cicd-api
+            ${mvnHome}/bin/mvn build-helper:parse-version versions:set -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.incrementalVersion}-\${BUILD_NUMBER} 
+            ${mvnHome}/bin/mvn clean install
+            """
+
+            step([$class: 'ArtifactArchiver', artifacts: '**/target/*.war, **/target/*.jar', fingerprint: true])
+        }
+        catch(e) {
+            currentBuild.result = 'FAILURE'
+            throw e
+        }
+        finally {
+            processStageResult()
+        }
+        
+    stage "Update BuildConfig Version"
+        
+        def version = parseVersion("${WORKSPACE}/ose-cicd-api/pom.xml")
+      login()
+      
+      sh """
+       set +x 
+      
+       currentOutputName=\$(oc get bc ${appName} -n ${devProject} --template='{{ .spec.output.to.name }}')
+       
+       newImageName=\${currentOutputName%:*}:${version}
+       
+       oc patch bc ${appName} -n ${devProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
+       
+      """
+
+        
+    stage "OpenShift Dev Build"
+    
+      login()
+    
+      sh """
+        set +x
+        mkdir -p ${WORKSPACE}/ose-cicd-api/target/s2i-build/deployments
+        cp ${WORKSPACE}/ose-cicd-api/target/*.jar ${WORKSPACE}/ose-cicd-api/target/s2i-build/deployments/
+        oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir="${WORKSPACE}/ose-cicd-api/target/s2i-build"
+      """
+      
+      stage "Dev Deployment"
+      
+        login()
+        
+        deployApp(appName, devProject, version)
+        
+        validateDeployment(appName,devProject)
+        
+    stage "Promote to QA"
+    
+      login()
+      
+      sh """
+        set +x
+        
+        echo "Promoting application to QA Environment"
+        
+        oc tag ${devProject}/${appName}:${version} ${qaProject}/${appName}:${version}
+        
+        # Sleep for a few moments
+        sleep 5
+        
+      """
+      
+      deployApp(appName, qaProject, version)
+      
+      validateDeployment(appName,qaProject)
+      
+      input "Do you want to promote the ${appName} to Production?"
+      
+    stage "Promote to Production"
+
+      login()
+      
+      sh """
+        set +x
+        
+        echo "Promoting application to Prod Environment"
+        
+        oc tag ${qaProject}/${appName}:${version} ${prodProject}/${appName}:${version}
+        
+        # Sleep for a few moments
+        sleep 5
+        
+      """
+      
+      deployApp(appName, prodProject, version)
+      
+      validateDeployment(appName,prodProject)
+
+
+}
+
+def processStageResult() {
+
+    if (currentBuild.result != null) {
+        sh "exit 1"
+    }
+}
+
+def login() {
+    sh """
+       set +x
+       oc login --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt --token=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://kubernetes.default.svc.cluster.local >/dev/null 2>&1 || echo 'OpenShift login failed'
+       """
+}
+
+def parseVersion(String filename) {
+  def matcher = readFile(filename) =~ '<version>(.+)</version>'
+  matcher ? matcher[0][1] : null
+}
+
+def deployApp(appName, namespace, version) {
+            sh """
+          set +x
+
+          newDeploymentImageName=${appName}:${version}
+          
+          imageReference=\$(oc get is ${appName} -n ${namespace} -o jsonpath="{.status.tags[?(@.tag==\\"${version}\\")].items[*].dockerImageReference}")
+
+          oc patch dc/${appName} -n ${namespace} -p "{\\"spec\\":{\\"template\\":{\\"spec\\":{\\"containers\\":[{\\"name\\":\\"${appName}\\",\\"image\\": \\"\${imageReference}\\" } ]}}, \\"triggers\\": [ { \\"type\\": \\"ImageChange\\", \\"imageChangeParams\\": { \\"containerNames\\": [ \\"${appName}\\" ], \\"from\\": { \\"kind\\": \\"ImageStreamTag\\", \\"name\\": \\"\${newDeploymentImageName}\\" } } } ] }}"
+
+          oc deploy ${appName} -n ${namespace} --latest
+          
+          # Sleep for a few moments
+          sleep 5
+        """
+
+    
+}
+
+def validateDeployment(String dcName, String namespace) {
+    
+    sh """
+      set +x
+    
+      COUNTER=0
+      DELAY=10
+      MAX_COUNTER=30
+      
+      echo "Validating deployment of ${dcName} in project ${namespace}"
+      
+      LATEST_DC_VERSION=\$(oc get dc swarm-app -n ${namespace} --template='{{ .status.latestVersion }}')
+      
+      RC_NAME=${dcName}-\${LATEST_DC_VERSION}
+      
+      while [ \$COUNTER -lt \$MAX_COUNTER ]
+      do
+      
+        REPLICAS=\$(oc get rc \${RC_NAME} -n ${namespace} --template="{{ .spec.replicas }}")
+        CURRENT_REPLICAS=\$(oc get rc \${RC_NAME} -n ${namespace} --template="{{ .status.replicas }}")
+        
+        if [ \$COUNTER -lt \$MAX_COUNTER ]; then
+        
+          if [ \$CURRENT_REPLICAS -eq \$REPLICAS ]; then
+            echo
+            break
+          fi
+          
+          echo -n "."
+          COUNTER=\$(( \$COUNTER + 1 ))
+        
+        fi
+        
+        if [ \$COUNTER -eq \$MAX_COUNTER ]; then
+          echo "Max Validation Attempts Exceeded. Failed Verifying Application Deployment..."
+          exit 1
+        fi
+    
+      done
+    
+    """
+}
