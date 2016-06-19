@@ -1,0 +1,31 @@
+{
+    "kind": "Template",
+    "apiVersion": "v1",
+    "metadata": {
+        "name": "create-sa",
+        "annotations": {
+            "description": "Service Account Creation"
+        }
+    },
+    "objects": [
+        {
+          "apiVersion": "v1",
+          "kind": "ServiceAccount",
+          "metadata": {
+            "name": "${NAME}"
+          }
+        }
+    ],
+    "parameters": [
+
+        {
+            "name": "NAME",
+            "description": "Name of the Service Account",
+            "required": true
+        }
+
+    ],
+    "labels": {
+        "template": "create-sa"
+    }
+}

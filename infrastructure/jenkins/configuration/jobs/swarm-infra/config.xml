@@ -1,0 +1,77 @@
+
+<?xml version='1.0' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.0">
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.0">
+    <script>node {
+    
+    env.KUBECONFIG = pwd() + &quot;/.kubeconfig&quot;
+    def infraProject = &quot;swarm-infra&quot;
+    def swarmBase = &quot;swarm-s2i&quot;
+    def WORKSPACE = pwd()
+    
+    stage &apos;Checkout&apos;
+    
+      git url: &quot;https://github.com/sabre1041/summit2016-ose-cicd.git&quot;
+      
+    stage &apos;Update BuildConfig Version&apos;
+      
+      def finalTagVersion = parseVersion(&quot;${WORKSPACE}/wildfly-swarm-s2i/version.txt&quot;)
+      
+      def buildVersion = &quot;${finalTagVersion}-\${BUILD_NUMBER}&quot;
+      
+      login()
+      
+      sh &quot;&quot;&quot;
+       set +x 
+      
+       currentOutputName=\$(oc get bc ${swarmBase} -n ${infraProject} --template=&apos;{{ .spec.output.to.name }}&apos;)
+       
+       newImageName=\${currentOutputName%:*}:${buildVersion}
+       
+       oc patch bc ${swarmBase} -n ${infraProject} -p &quot;{ \\&quot;spec\\&quot;: { \\&quot;output\\&quot;: { \\&quot;to\\&quot;: { \\&quot;name\\&quot;: \\&quot;\${newImageName}\\&quot; } } } }&quot;
+       
+      &quot;&quot;&quot;
+    stage &quot;Build Image&quot;
+    
+    
+      login()
+      
+      sh &quot;&quot;&quot;
+        set +x
+        oc start-build ${swarmBase} -n ${infraProject} --follow=true --wait=true --from-dir=&quot;${WORKSPACE}/wildfly-swarm-s2i&quot;
+      &quot;&quot;&quot;
+    stage &quot;Tagging Image&quot;
+      login()
+      
+      sh &quot;&quot;&quot;
+        set +x
+        oc tag ${infraProject}/${swarmBase}:${buildVersion} ${infraProject}/${swarmBase}:${finalTagVersion}
+        
+        oc tag ${infraProject}/${swarmBase}:${finalTagVersion} openshift/${swarmBase}:${finalTagVersion}
+      &quot;&quot;&quot;
+}
+
+def login() {
+    sh &quot;&quot;&quot;
+       set +x
+       oc login --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt --token=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://kubernetes.default.svc.cluster.local &gt;/dev/null 2&gt;&amp;1 || echo &apos;OpenShift login failed&apos;
+       &quot;&quot;&quot;
+}
+
+def parseVersion(String filename) {
+    def version = readFile(filename)
+    version.trim()
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers>
+    <hudson.triggers.SCMTrigger>
+      <spec>* * * * *</spec>
+      <ignorePostCommitHooks>false</ignorePostCommitHooks>
+    </hudson.triggers.SCMTrigger>
+  </triggers>
+</flow-definition>

@@ -1,0 +1,187 @@
+
+<?xml version='1.0' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job@2.0">
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties/>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@2.0">
+    <script>node(&apos;ose-slave&apos;) {
+    
+    def WORKSPACE = pwd()
+    def mvnHome = tool &apos;maven&apos;
+    env.KUBECONFIG = pwd() + &quot;/.kubeconfig&quot;
+    def appName = &quot;swarm-app&quot;
+    def devProject = &quot;swarm-dev&quot;
+    def qaProject = &quot;swarm-qa&quot;
+    def prodProject = &quot;swarm-prod&quot;
+   
+   stage &apos;Checkout&apos;
+
+       git url: &quot;https://github.com/sabre1041/summit2016-ose-cicd.git&quot;
+
+   stage &apos;Maven Build&apos;
+   
+        try {
+            sh &quot;&quot;&quot;
+            set +x
+            cd ${WORKSPACE}/ose-cicd-api
+            ${mvnHome}/bin/mvn build-helper:parse-version versions:set -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.incrementalVersion}-\${BUILD_NUMBER} 
+            ${mvnHome}/bin/mvn clean install
+            &quot;&quot;&quot;
+
+            step([$class: &apos;ArtifactArchiver&apos;, artifacts: &apos;**/target/*.war, **/target/*.jar&apos;, fingerprint: true])
+        }
+        catch(e) {
+            currentBuild.result = &apos;FAILURE&apos;
+            throw e
+        }
+        finally {
+            processStageResult()
+        }
+        
+    stage &quot;Update BuildConfig Version&quot;
+        
+        def version = parseVersion(&quot;${WORKSPACE}/ose-cicd-api/pom.xml&quot;)
+      login()
+      
+      sh &quot;&quot;&quot;
+       set +x 
+      
+       currentOutputName=\$(oc get bc ${appName} -n ${devProject} --template=&apos;{{ .spec.output.to.name }}&apos;)
+       
+       newImageName=\${currentOutputName%:*}:${version}
+       
+       oc patch bc ${appName} -n ${devProject} -p &quot;{ \\&quot;spec\\&quot;: { \\&quot;output\\&quot;: { \\&quot;to\\&quot;: { \\&quot;name\\&quot;: \\&quot;\${newImageName}\\&quot; } } } }&quot;
+       
+      &quot;&quot;&quot;
+
+        
+    stage &quot;OpenShift Dev Build&quot;
+    
+      login()
+    
+      sh &quot;&quot;&quot;
+        set +x
+        mkdir -p ${WORKSPACE}/ose-cicd-api/target/s2i-build/deployments
+        cp ${WORKSPACE}/ose-cicd-api/target/*.jar ${WORKSPACE}/ose-cicd-api/target/s2i-build/deployments/
+        oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir=&quot;${WORKSPACE}/ose-cicd-api/target/s2i-build&quot;
+      &quot;&quot;&quot;
+      
+      stage &quot;Dev Deployment&quot;
+      
+        login()
+        
+        deployApp(appName, devProject, version)
+        
+        validateDeployment(appName,devProject)
+      
+    stage &quot;Promote to Production&quot;
+
+      input &quot;Do you want to promote the ${appName} to Production?&quot;
+
+      login()
+      
+      sh &quot;&quot;&quot;
+        set +x
+        
+        echo &quot;Promoting application to Prod Environment&quot;
+        
+        oc tag ${devProject}/${appName}:${version} ${prodProject}/${appName}:${version}
+        
+        # Sleep for a few moments
+        sleep 5
+        
+      &quot;&quot;&quot;
+      
+      deployApp(appName, prodProject, version)
+      
+      validateDeployment(appName,prodProject)
+
+
+}
+
+def processStageResult() {
+
+    if (currentBuild.result != null) {
+        sh &quot;exit 1&quot;
+    }
+}
+
+def login() {
+    sh &quot;&quot;&quot;
+       set +x
+       oc login --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt --token=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) https://kubernetes.default.svc.cluster.local &gt;/dev/null 2&gt;&amp;1 || echo &apos;OpenShift login failed&apos;
+       &quot;&quot;&quot;
+}
+
+def parseVersion(String filename) {
+  def matcher = readFile(filename) =~ &apos;&lt;version&gt;(.+)&lt;/version&gt;&apos;
+  matcher ? matcher[0][1] : null
+}
+
+def deployApp(appName, namespace, version) {
+            sh &quot;&quot;&quot;
+          set +x
+
+          newDeploymentImageName=${appName}:${version}
+          
+          imageReference=\$(oc get is ${appName} -n ${namespace} -o jsonpath=&quot;{.status.tags[?(@.tag==\\&quot;${version}\\&quot;)].items[*].dockerImageReference}&quot;)
+
+          oc patch dc/${appName} -n ${namespace} -p &quot;{\\&quot;spec\\&quot;:{\\&quot;template\\&quot;:{\\&quot;spec\\&quot;:{\\&quot;containers\\&quot;:[{\\&quot;name\\&quot;:\\&quot;${appName}\\&quot;,\\&quot;image\\&quot;: \\&quot;\${imageReference}\\&quot; } ]}}, \\&quot;triggers\\&quot;: [ { \\&quot;type\\&quot;: \\&quot;ImageChange\\&quot;, \\&quot;imageChangeParams\\&quot;: { \\&quot;containerNames\\&quot;: [ \\&quot;${appName}\\&quot; ], \\&quot;from\\&quot;: { \\&quot;kind\\&quot;: \\&quot;ImageStreamTag\\&quot;, \\&quot;name\\&quot;: \\&quot;\${newDeploymentImageName}\\&quot; } } } ] }}&quot;
+
+          oc deploy ${appName} -n ${namespace} --latest
+          
+          # Sleep for a few moments
+          sleep 5
+        &quot;&quot;&quot;
+
+    
+}
+
+def validateDeployment(String dcName, String namespace) {
+    
+    sh &quot;&quot;&quot;
+      set +x
+    
+      COUNTER=0
+      DELAY=10
+      MAX_COUNTER=30
+      
+      echo &quot;Validating deployment of ${dcName} in project ${namespace}&quot;
+      
+      LATEST_DC_VERSION=\$(oc get dc swarm-app -n ${namespace} --template=&apos;{{ .status.latestVersion }}&apos;)
+      
+      RC_NAME=${dcName}-\${LATEST_DC_VERSION}
+      
+      while [ \$COUNTER -lt \$MAX_COUNTER ]
+      do
+      
+        REPLICAS=\$(oc get rc \${RC_NAME} -n ${namespace} --template=&quot;{{ .spec.replicas }}&quot;)
+        CURRENT_REPLICAS=\$(oc get rc \${RC_NAME} -n ${namespace} --template=&quot;{{ .status.replicas }}&quot;)
+        
+        if [ \$COUNTER -lt \$MAX_COUNTER ]; then
+        
+          if [ \$CURRENT_REPLICAS -eq \$REPLICAS ]; then
+            echo
+            break
+          fi
+          
+          echo -n &quot;.&quot;
+          COUNTER=\$(( \$COUNTER + 1 ))
+        
+        fi
+        
+        if [ \$COUNTER -eq \$MAX_COUNTER ]; then
+          echo &quot;Max Validation Attempts Exceeded. Failed Verifying Application Deployment...&quot;
+          exit 1
+        fi
+    
+      done
+    
+    &quot;&quot;&quot;
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <triggers/>
+</flow-definition>

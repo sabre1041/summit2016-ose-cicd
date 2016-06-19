@@ -1,4 +1,4 @@
-node {
+node('ose-slave') {
     
     def WORKSPACE = pwd()
     def mvnHome = tool 'maven'
@@ -67,30 +67,10 @@ node {
         deployApp(appName, devProject, version)
         
         validateDeployment(appName,devProject)
-        
-    stage "Promote to QA"
-    
-      login()
-      
-      sh """
-        set +x
-        
-        echo "Promoting application to QA Environment"
-        
-        oc tag ${devProject}/${appName}:${version} ${qaProject}/${appName}:${version}
-        
-        # Sleep for a few moments
-        sleep 5
-        
-      """
-      
-      deployApp(appName, qaProject, version)
-      
-      validateDeployment(appName,qaProject)
-      
-      input "Do you want to promote the ${appName} to Production?"
       
     stage "Promote to Production"
+
+      input "Do you want to promote the ${appName} to Production?"
 
       login()
       
@@ -99,7 +79,7 @@ node {
         
         echo "Promoting application to Prod Environment"
         
-        oc tag ${qaProject}/${appName}:${version} ${prodProject}/${appName}:${version}
+        oc tag ${devProject}/${appName}:${version} ${prodProject}/${appName}:${version}
         
         # Sleep for a few moments
         sleep 5

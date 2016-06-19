@@ -1,0 +1,72 @@
+{
+    "kind": "Template",
+    "apiVersion": "v1",
+    "metadata": {
+        "name": "jenkins-slave",
+        "annotations": {
+            "description": "Jenkins Slave",
+            "iconClass": "icon-jenkins",
+            "tags": "jenkins"
+        }
+    },
+    "objects": [
+        {
+            "kind": "ImageStream",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "annotations": {
+                  "slave-directory": "/opt/jenkins-slave",
+                  "slave-label": "ose-slave"  
+                },
+                "labels": {
+                    "application": "${APPLICATION_NAME}",
+                    "role": "jenkins-slave"
+                }
+            }
+        },
+		{
+            "kind": "BuildConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}",
+                "labels": {
+                    "application": "${APPLICATION_NAME}"
+                }
+            },
+            "spec": {
+                "source": {
+                    "type": "Binary",
+                    "binary": {
+                        "asFile": ""
+                    }
+                },
+                "strategy": {
+                    "type": "Docker",
+                    "dockerStrategy": {
+                        "from": {
+                            "kind": "DockerImage",
+                            "name": "centos:7"
+                        }
+                    }
+                },
+                "output": {
+                    "to": {
+                        "kind": "ImageStreamTag",
+                        "name": "${APPLICATION_NAME}:latest"
+                    }
+                }
+            }
+		}
+    ],
+    "parameters": [
+        {
+            "name": "APPLICATION_NAME",
+            "description": "Application Name",
+            "value": "jenkins-slave"
+        }
+    ],
+    "labels": {
+        "template": "jenkins-slave"
+    }
+}

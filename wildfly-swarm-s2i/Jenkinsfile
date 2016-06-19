@@ -11,7 +11,9 @@ node {
       
     stage 'Update BuildConfig Version'
       
-      def version = parseVersion("${WORKSPACE}/wildfly-swarm-s2i/version.txt")
+      def finalTagVersion = parseVersion("${WORKSPACE}/wildfly-swarm-s2i/version.txt")
+      
+      def buildVersion = "${finalTagVersion}-\${BUILD_NUMBER}"
       
       login()
       
@@ -20,7 +22,7 @@ node {
       
        currentOutputName=\$(oc get bc ${swarmBase} -n ${infraProject} --template='{{ .spec.output.to.name }}')
        
-       newImageName=\${currentOutputName%:*}:${version}
+       newImageName=\${currentOutputName%:*}:${buildVersion}
        
        oc patch bc ${swarmBase} -n ${infraProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
        
@@ -34,12 +36,14 @@ node {
         set +x
         oc start-build ${swarmBase} -n ${infraProject} --follow=true --wait=true --from-dir="${WORKSPACE}/wildfly-swarm-s2i"
       """
-    stage "Tag to OpenShift Project"
+    stage "Tagging Image"
       login()
       
       sh """
         set +x
-        oc tag ${infraProject}/${swarmBase}:${version} openshift/${swarmBase}:${version}
+        oc tag ${infraProject}/${swarmBase}:${buildVersion} ${infraProject}/${swarmBase}:${finalTagVersion}
+        
+        oc tag ${infraProject}/${swarmBase}:${finalTagVersion} openshift/${swarmBase}:${finalTagVersion}
       """
 }
 
