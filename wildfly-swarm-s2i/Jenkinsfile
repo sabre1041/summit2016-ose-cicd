@@ -7,11 +7,11 @@ node {
     
     stage 'Checkout'
     
-      git url: "https://github.com/sabre1041/summit2016-ose-cicd.git"
+      git url: "http://gogs:3000/gogs/wildfly-swarm-s2i.git"
       
     stage 'Update BuildConfig Version'
       
-      def finalTagVersion = parseVersion("${WORKSPACE}/wildfly-swarm-s2i/version.txt")
+      def finalTagVersion = parseVersion("${WORKSPACE}/version.txt")
       
       def buildVersion = "${finalTagVersion}-\${BUILD_NUMBER}"
       
@@ -34,7 +34,7 @@ node {
       
       sh """
         set +x
-        oc start-build ${swarmBase} -n ${infraProject} --follow=true --wait=true --from-dir="${WORKSPACE}/wildfly-swarm-s2i"
+        oc start-build ${swarmBase} -n ${infraProject} --follow=true --wait=true --from-dir="${WORKSPACE}/"
       """
     stage "Tagging Image"
       login()

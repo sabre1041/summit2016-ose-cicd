@@ -10,14 +10,13 @@ node('ose-slave') {
    
    stage 'Checkout'
 
-       git url: "https://github.com/sabre1041/summit2016-ose-cicd.git"
+       git url: " http://gogs:3000/gogs/ose-cicd-api.git"
 
    stage 'Maven Build'
    
         try {
             sh """
             set +x
-            cd ${WORKSPACE}/ose-cicd-api
             ${mvnHome}/bin/mvn build-helper:parse-version versions:set -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.incrementalVersion}-\${BUILD_NUMBER} 
             ${mvnHome}/bin/mvn clean install
             """
@@ -34,7 +33,7 @@ node('ose-slave') {
         
     stage "Update BuildConfig Version"
         
-        def version = parseVersion("${WORKSPACE}/ose-cicd-api/pom.xml")
+        def version = parseVersion("${WORKSPACE}/pom.xml")
       login()
       
       sh """
@@ -55,9 +54,9 @@ node('ose-slave') {
     
       sh """
         set +x
-        mkdir -p ${WORKSPACE}/ose-cicd-api/target/s2i-build/deployments
-        cp ${WORKSPACE}/ose-cicd-api/target/*.jar ${WORKSPACE}/ose-cicd-api/target/s2i-build/deployments/
-        oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir="${WORKSPACE}/ose-cicd-api/target/s2i-build"
+        mkdir -p ${WORKSPACE}//target/s2i-build/deployments
+        cp ${WORKSPACE}//target/*.jar ${WORKSPACE}//target/s2i-build/deployments/
+        oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir="${WORKSPACE}//target/s2i-build"
       """
       
       stage "Dev Deployment"
