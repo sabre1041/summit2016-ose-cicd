@@ -216,7 +216,7 @@ echo
 oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/wildfly-swarm-s2i $GOGS_POD:/tmp/
 oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/wildfly-swarm-s2i && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
 curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/wildfly-swarm-s2i","uid": 1,"repo_name": "wildfly-swarm-s2i"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
-
+curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/swarm-infra/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/wildfly-swarm-s2i/hooks
 
 echo
 echo "Setting up ose-cicd-api repository..."
@@ -224,7 +224,7 @@ echo
 oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/ose-cicd-api $GOGS_POD:/tmp/
 oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/ose-cicd-api && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
 curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/ose-cicd-api","uid": 1,"repo_name": "ose-cicd-api"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
-
+curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/swarm-app/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/ose-cicd-api/hooks
 
 
 # Process Jenkins Slave Template

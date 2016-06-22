@@ -23,10 +23,5 @@
     </scm>
     <scriptPath>Jenkinsfile</scriptPath>
   </definition>
-  <triggers>
-    <hudson.triggers.SCMTrigger>
-      <spec>* * * * *</spec>
-      <ignorePostCommitHooks>false</ignorePostCommitHooks>
-    </hudson.triggers.SCMTrigger>
-  </triggers>
+  <triggers/>
 </flow-definition>
