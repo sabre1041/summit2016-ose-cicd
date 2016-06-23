@@ -49,13 +49,13 @@
             "kind": "Service",
             "apiVersion": "v1",
             "metadata": {
-                "name": "${APPLICATION_NAME}-slave",
+                "name": "${APPLICATION_NAME}-agent",
                 "creationTimestamp": null
             },
             "spec": {
                 "ports": [
                     {
-                        "name": "slave",
+                        "name": "agent",
                         "protocol": "TCP",
                         "port": 50000,
                         "targetPort": 50000

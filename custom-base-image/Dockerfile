@@ -4,7 +4,7 @@
 
 FROM openshift/base-centos7
 
-MAINTAINER Ben Browning <bbrownin@redhat.com>
+MAINTAINER Andrew Block <andy.block@gmail.com>
 
 EXPOSE 8080 8888
 

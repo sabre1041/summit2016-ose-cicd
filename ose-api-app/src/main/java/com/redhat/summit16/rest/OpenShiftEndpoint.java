@@ -27,8 +27,8 @@ import io.fabric8.openshift.client.OpenShiftClient;
 public class OpenShiftEndpoint {
 		
 	private static final String TEST_MODE_PROP = "OSE_CICD_TEST_MODE";
-	private static final String SWARM_POD_NAME_PROP = "SWARM_POD_NAME";
-	private static final String SWARM_POD_NAMESPACE_PROP = "SWARM_POD_NAMESPACE";
+	private static final String APP_POD_NAME_PROP = "APP_POD_NAME";
+	private static final String APP_POD_NAMESPACE_PROP = "APP_POD_NAMESPACE";
 	
 	private static String podNamespace;
 	private static String podName;
@@ -133,7 +133,7 @@ public class OpenShiftEndpoint {
   private String getPodName() {
 	  
 	  if(podName == null) {
-		  podName = System.getenv(SWARM_POD_NAME_PROP);
+		  podName = System.getenv(APP_POD_NAME_PROP);
 	  }
 	  
 	  return podName;
@@ -142,7 +142,7 @@ public class OpenShiftEndpoint {
   
   private String getPodNamespace() {
 	  if(podNamespace == null) {
-		  podNamespace = System.getenv(SWARM_POD_NAMESPACE_PROP);
+		  podNamespace = System.getenv(APP_POD_NAMESPACE_PROP);
 	  }
 	  
 	  return podNamespace;

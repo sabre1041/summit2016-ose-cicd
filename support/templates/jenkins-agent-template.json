@@ -2,35 +2,30 @@
     "kind": "Template",
     "apiVersion": "v1",
     "metadata": {
-        "name": "swarm-s2i",
+        "name": "jenkins-agent",
         "annotations": {
-            "description": "Application template for the Swarm S2I Builder",
-            "iconClass": "icon-jboss",
-            "tags": "javaee,java,builder"
+            "description": "Jenkins Agent",
+            "iconClass": "icon-jenkins",
+            "tags": "jenkins"
         }
     },
     "objects": [
-        {
-           "kind": "ImageStream",
-           "apiVersion": "v1",
-           "metadata": {
-              "name": "swarm-centos"
-           },
-           "spec": {
-              "dockerImageRepository": "openshift/base-centos7"
-           }
-        },
         {
             "kind": "ImageStream",
             "apiVersion": "v1",
             "metadata": {
                 "name": "${APPLICATION_NAME}",
+                "annotations": {
+                  "slave-directory": "/opt/jenkins-agent",
+                  "slave-label": "ose-agent"  
+                },
                 "labels": {
-                    "application": "${APPLICATION_NAME}"
+                    "application": "${APPLICATION_NAME}",
+                    "role": "jenkins-slave"
                 }
             }
         },
-        {
+		{
             "kind": "BuildConfig",
             "apiVersion": "v1",
             "metadata": {
@@ -50,8 +45,8 @@
                     "type": "Docker",
                     "dockerStrategy": {
                         "from": {
-                            "kind": "ImageStreamTag",
-                            "name": "swarm-centos:latest"
+                            "kind": "DockerImage",
+                            "name": "centos:7"
                         }
                     }
                 },
@@ -60,28 +55,18 @@
                         "kind": "ImageStreamTag",
                         "name": "${APPLICATION_NAME}:latest"
                     }
-                },
-                "triggers": [
-                    {
-                        "type": "ImageChange",
-                        "imageChange": {}
-                    },
-                    {
-                        "type": "ConfigChange"
-                    }
-                ]
+                }
             }
-        }
+		}
     ],
     "parameters": [
         {
             "name": "APPLICATION_NAME",
-            "description": "The name for the application.",
-            "value": "swarm-s2i",
-            "required": true
+            "description": "Application Name",
+            "value": "jenkins-agent"
         }
     ],
     "labels": {
-        "template": "swarm-s2i"
+        "template": "jenkins-agent"
     }
 }

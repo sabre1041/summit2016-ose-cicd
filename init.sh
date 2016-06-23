@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#set -e
+set -e
 
 SCRIPT_BASE_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )
 
@@ -9,12 +9,11 @@ OSE_CLI_USER="admin"
 OSE_CLI_PASSWORD="admin"
 OSE_CLI_HOST="https://10.1.2.2:8443"
 
-OSE_SWARM_INFRA_PROJECT="swarm-infra"
+CUSTOM_BASE_IMAGE_PROJECT="custom-base-image"
 
 OSE_CI_PROJECT="ci"
-OSE_SWARM_APP_DEV="swarm-dev"
-OSE_SWARM_APP_QA="swarm-qa"
-OSE_SWARM_APP_PROD="swarm-prod"
+OSE_API_APP_DEV="api-app-dev"
+OSE_API_APP_PROD="api-app-prod"
 
 
 POSTGRESQL_USER="postgresql"
@@ -67,7 +66,7 @@ function wait_for_endpoint_registration() {
     set -e
 }
 
-# Login to CDK
+# Login to OSE
 oc login -u ${OSE_CLI_USER} -p ${OSE_CLI_PASSWORD} ${OSE_CLI_HOST} --insecure-skip-tls-verify=true
 
 # Create CI Project
@@ -76,43 +75,43 @@ echo "Creating new CI Project (${OSE_CI_PROJECT})..."
 echo
 oc new-project ${OSE_CI_PROJECT}
 
-# Create Infrastructure Project
+# Create Custom Base Image Project
 echo
-echo "Creating new Infrastructure Project (${OSE_SWARM_INFRA_PROJECT})..."
+echo "Creating new Custom Base Image Project (${CUSTOM_BASE_IMAGE_PROJECT})..."
 echo
-oc new-project ${OSE_SWARM_INFRA_PROJECT}
+oc new-project ${CUSTOM_BASE_IMAGE_PROJECT}
 
 # Create App Dev Project
 echo
-echo "Creating new App Dev Project (${OSE_SWARM_APP_DEV})..."
+echo "Creating new App Dev Project (${OSE_API_APP_DEV})..."
 echo
-oc new-project ${OSE_SWARM_APP_DEV}
+oc new-project ${OSE_API_APP_DEV}
 
 # Create App Prod Project
 echo
-echo "Creating new App Prod Project (${OSE_SWARM_APP_PROD})..."
+echo "Creating new App Prod Project (${OSE_API_APP_PROD})..."
 echo
-oc new-project ${OSE_SWARM_APP_PROD}
+oc new-project ${OSE_API_APP_PROD}
 
 # Grant Default CI Account Edit Access to All Projects and OpenShift Project
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_CI_PROJECT}
-oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_SWARM_INFRA_PROJECT}
-oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_SWARM_APP_DEV}
-oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_SWARM_APP_PROD}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${CUSTOM_BASE_IMAGE_PROJECT}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_API_APP_DEV}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_API_APP_PROD}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n openshift
 
 # Grant Default Service Account in Each Project Editt Access
-oc policy add-role-to-user edit system:serviceaccount:${OSE_SWARM_APP_DEV}:default -n ${OSE_SWARM_APP_DEV}
-oc policy add-role-to-user edit system:serviceaccount:${OSE_SWARM_APP_PROD}:default -n ${OSE_SWARM_APP_PROD}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_DEV}:default -n ${OSE_API_APP_DEV}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_PROD}:default -n ${OSE_API_APP_PROD}
 
 
 # Grant Higher Level Service Account Access to the Dev Project for ImageStream Tagging
 # TODO: Refactor to only ImagePuller role
-oc policy add-role-to-user edit system:serviceaccount:${OSE_SWARM_APP_PROD}:default -n ${OSE_SWARM_APP_DEV}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_PROD}:default -n ${OSE_API_APP_DEV}
 
 
 # Grant Access For Builder Account to Pull Images in Dev Project
-oc policy add-role-to-user edit system:serviceaccount:${OSE_SWARM_APP_DEV}:builder -n ${OSE_SWARM_INFRA_PROJECT}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_DEV}:builder -n ${CUSTOM_BASE_IMAGE_PROJECT}
 
 
 
@@ -174,8 +173,12 @@ GOGS_POD=$(oc get pods -n $OSE_CI_PROJECT -l=deploymentconfig=gogs --no-headers 
 GOGS_ROUTE=$(oc get routes -n $OSE_CI_PROJECT gogs --template='{{ .spec.host }}')
 
 # Sleep before setting up gogs server
-sleep 5
+sleep 10
 
+
+echo
+echo "Setting up Gogs Server..."
+echo
 # Setup Server
 HTTP_RESPONSE=$(curl -o /dev/null -sL -w "%{http_code}" http://$GOGS_ROUTE/install \
 --form db_type=PostgreSQL \
@@ -211,36 +214,36 @@ echo
 sleep 10
 
 echo
-echo "Setting up wildfly-swarm-s2i repository..."
+echo "Setting up custom base image git repository..."
 echo
-oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/wildfly-swarm-s2i $GOGS_POD:/tmp/
-oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/wildfly-swarm-s2i && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
-curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/wildfly-swarm-s2i","uid": 1,"repo_name": "wildfly-swarm-s2i"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
-curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/swarm-infra/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/wildfly-swarm-s2i/hooks
+oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/custom-base-image $GOGS_POD:/tmp/
+oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/custom-base-image && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
+curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/custom-base-image","uid": 1,"repo_name": "custom-base-image"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
+curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/custom-base-image/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/custom-base-image/hooks
 
 echo
-echo "Setting up ose-cicd-api repository..."
+echo "Setting up OSE API App repository..."
 echo
-oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/ose-cicd-api $GOGS_POD:/tmp/
-oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/ose-cicd-api && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
-curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/ose-cicd-api","uid": 1,"repo_name": "ose-cicd-api"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
-curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/swarm-app/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/ose-cicd-api/hooks
+oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/ose-api-app $GOGS_POD:/tmp/
+oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/ose-api-app && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
+curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/ose-api-app","uid": 1,"repo_name": "ose-api-app"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
+curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/ose-api-app/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/ose-api-app/hooks
 
 
-# Process Jenkins Slave Template
+# Process Jenkins Agent Template
 echo
-echo "Processing Jenkins Slave Template..."
+echo "Processing Jenkins Agent Template..."
 echo
-oc process -v APPLICATION_NAME=jenkins-slave -f "${SCRIPT_BASE_DIR}/support/templates/jenkins-slave-template.json" | oc -n ${OSE_CI_PROJECT} create -f -
+oc process -v APPLICATION_NAME=jenkins-agent -f "${SCRIPT_BASE_DIR}/support/templates/jenkins-agent-template.json" | oc -n ${OSE_CI_PROJECT} create -f -
 
 echo
-echo "Starting Jenkins Slave binary build..."
+echo "Starting Jenkins Agent binary build..."
 echo
-oc start-build -n ${OSE_CI_PROJECT} jenkins-slave --from-dir="${SCRIPT_BASE_DIR}/infrastructure/jenkins-slave"
+oc start-build -n ${OSE_CI_PROJECT} jenkins-agent --from-dir="${SCRIPT_BASE_DIR}/infrastructure/jenkins-agent"
 
-wait_for_running_build "jenkins-slave" "${OSE_CI_PROJECT}"
+wait_for_running_build "jenkins-agent" "${OSE_CI_PROJECT}"
 
-oc build-logs -n ${OSE_CI_PROJECT} -f jenkins-slave-1
+oc build-logs -n ${OSE_CI_PROJECT} -f jenkins-agent-1
 
 # Process Jenkins Template
 echo
@@ -258,54 +261,54 @@ wait_for_running_build "jenkins" "${OSE_CI_PROJECT}"
 oc build-logs -n ${OSE_CI_PROJECT} -f jenkins-1
 
 
-oc project ${OSE_SWARM_INFRA_PROJECT}
+oc project ${CUSTOM_BASE_IMAGE_PROJECT}
 
 
 echo
-echo "Instantiating the Swarm builder and associated dependencies in the ${OSE_SWARM_INFRA_PROJECT} project..."
+echo "Instantiating the base builder and associated dependencies in the ${CUSTOM_BASE_IMAGE_PROJECT} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/swarm-s2i-template.json" | oc -n ${OSE_SWARM_INFRA_PROJECT} create -f-
+oc process -f "$SCRIPT_BASE_DIR/support/templates/custom-base-image-template.json" | oc -n ${CUSTOM_BASE_IMAGE_PROJECT} create -f-
 
 echo
 echo "Importing upstream OpenShift Base Centos 7 Image..."
 echo
-oc import-image swarm-centos -n ${OSE_SWARM_INFRA_PROJECT}
+oc import-image base-centos -n ${CUSTOM_BASE_IMAGE_PROJECT}
 
 echo
-echo "Waiting for swarm-s2i build to begin..."
+echo "Waiting for custom base image build to begin..."
 echo
-wait_for_running_build "swarm-s2i" "${OSE_SWARM_INFRA_PROJECT}"
+wait_for_running_build "custom-base-image" "${CUSTOM_BASE_IMAGE_PROJECT}"
 
 # Cancel initial build since this is a binary build with no content
 echo
-echo "Cancelling initial swarm-s2i build..."
+echo "Cancelling initial custom base image build..."
 echo
-oc cancel-build swarm-s2i-1 -n ${OSE_SWARM_INFRA_PROJECT}
+oc cancel-build custom-base-image-1 -n ${CUSTOM_BASE_IMAGE_PROJECT}
 
 
 
-oc project ${OSE_SWARM_APP_DEV}
+oc project ${OSE_API_APP_DEV}
 
 echo
-echo "Instantiating the Swarm application and associated dependencies in the ${OSE_SWARM_APP_DEV} project..."
+echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_DEV} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/swarm-app-template.json" -v=SWARM_BASE_TAG=1.0 | oc -n ${OSE_SWARM_APP_DEV} create -f-
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=CUSTOM_BASE_IMAGE_TAG=1.0,APPLICATION_NAME=ose-api-app | oc -n ${OSE_API_APP_DEV} create -f-
 
 
 #TODO: Delete builds as well?
 
-oc project ${OSE_SWARM_APP_PROD}
+oc project ${OSE_API_APP_PROD}
 
 echo
-echo "Instantiating the Swarm application and associated dependencies in the ${OSE_SWARM_APP_PROD} project..."
+echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_PROD} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/swarm-app-template.json" | oc create -n ${OSE_SWARM_APP_PROD} -f-
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app | oc create -n ${OSE_API_APP_PROD} -f-
 
 # Delete BuildConfig object as it is not needed in this project
 echo
-echo "Deleting BuildConfig in the ${OSE_SWARM_APP_PROD} project..."
+echo "Deleting BuildConfig in the ${OSE_API_APP_PROD} project..."
 echo
-oc delete bc swarm-app -n ${OSE_SWARM_APP_PROD}
+oc delete bc ose-api-app -n ${OSE_API_APP_PROD}
 
 echo
 echo "=================================="

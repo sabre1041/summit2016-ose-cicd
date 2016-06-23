@@ -4,8 +4,8 @@
 
   <modelVersion>4.0.0</modelVersion>
   <groupId>com.redhat.summit16</groupId>
-  <artifactId>ose-cicd-api</artifactId>
-  <name>Wildfly Swarm Example</name>
+  <artifactId>ose-api-app</artifactId>
+  <name>OpenShift API Viewer Example Application</name>
   <version>1.0.0-SNAPSHOT</version>
   <packaging>war</packaging>
 
@@ -31,7 +31,7 @@
   </dependencyManagement>
 
   <build>
-    <finalName>ose-cicd-api</finalName>
+    <finalName>ose-api-app</finalName>
     <plugins>
       <plugin>
         <groupId>org.wildfly.swarm</groupId>

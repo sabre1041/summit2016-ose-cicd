@@ -4,7 +4,7 @@
   <description></description>
   <keepDependencies>false</keepDependencies>
   <scm class="com.openshift.jenkins.plugins.pipeline.OpenShiftImageStreams" plugin="openshift-pipeline@1.0.17">
-    <imageStreamName>swarm-s2i</imageStreamName>
+    <imageStreamName>custom-base-image</imageStreamName>
     <tag>1.0</tag>
     <apiURL>https://kubernetes.default.svc.cluster.local</apiURL>
     <namespace>openshift</namespace>
@@ -28,7 +28,7 @@
       <configs>
         <hudson.plugins.parameterizedtrigger.BuildTriggerConfig>
           <configs class="empty-list"/>
-          <projects>swarm-app</projects>
+          <projects>ose-api-app-pipeline</projects>
           <condition>SUCCESS</condition>
           <triggerWithNoParameters>false</triggerWithNoParameters>
         </hudson.plugins.parameterizedtrigger.BuildTriggerConfig>

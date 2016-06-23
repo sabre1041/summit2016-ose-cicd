@@ -7,7 +7,7 @@ export LD_PRELOAD=libnss_wrapper.so
 export NSS_WRAPPER_PASSWD=${HOME}/passwd
 export NSS_WRAPPER_GROUP=/etc/group
 
-JAR="/opt/jenkins-slave/bin/slave.jar"
+JAR="/opt/jenkins-agent/bin/agent.jar"
 
 
 # if -url is not provided try env vars
@@ -26,8 +26,8 @@ curl ${JENKINS_URL}/jnlpJars/remoting.jar -o ${JAR}
 if [[ "$@" != *"-tunnel "* ]]; then
   if [ ! -z "$JENKINS_TUNNEL" ]; then
     PARAMS="$PARAMS -tunnel $JENKINS_TUNNEL"
-  elif [ ! -z "$JENKINS_SLAVE_SERVICE_HOST" ] && [ ! -z "$JENKINS_SLAVE_SERVICE_PORT" ]; then
-    PARAMS="$PARAMS -tunnel $JENKINS_SLAVE_SERVICE_HOST:$JENKINS_SLAVE_SERVICE_PORT"
+  elif [ ! -z "$JENKINS_AGENT_SERVICE_HOST" ] && [ ! -z "$JENKINS_AGENT_SERVICE_PORT" ]; then
+    PARAMS="$PARAMS -tunnel $JENKINS_AGENT_SERVICE_HOST:$JENKINS_AGENT_SERVICE_PORT"
   fi
 fi
 

@@ -1,16 +1,15 @@
-node('ose-slave') {
+node('ose-agent') {
     
     def WORKSPACE = pwd()
     def mvnHome = tool 'maven'
     env.KUBECONFIG = pwd() + "/.kubeconfig"
-    def appName = "swarm-app"
-    def devProject = "swarm-dev"
-    def qaProject = "swarm-qa"
-    def prodProject = "swarm-prod"
+    def appName = "ose-api-app"
+    def devProject = "api-app-dev"
+    def prodProject = "api-app-prod"
    
    stage 'Checkout'
 
-       git url: " http://gogs:3000/gogs/ose-cicd-api.git"
+       checkout scm
 
    stage 'Maven Build'
    
@@ -141,7 +140,7 @@ def validateDeployment(String dcName, String namespace) {
       
       echo "Validating deployment of ${dcName} in project ${namespace}"
       
-      LATEST_DC_VERSION=\$(oc get dc swarm-app -n ${namespace} --template='{{ .status.latestVersion }}')
+      LATEST_DC_VERSION=\$(oc get dc ${dcName} -n ${namespace} --template='{{ .status.latestVersion }}')
       
       RC_NAME=${dcName}-\${LATEST_DC_VERSION}
       

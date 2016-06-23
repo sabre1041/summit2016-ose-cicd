@@ -1,13 +1,13 @@
-node {
+node('ose-agent') {
     
     env.KUBECONFIG = pwd() + "/.kubeconfig"
-    def infraProject = "swarm-infra"
-    def swarmBase = "swarm-s2i"
+    def baseImageProject = "custom-base-image"
+    def baseImage = "custom-base-image"
     def WORKSPACE = pwd()
     
     stage 'Checkout'
     
-      git url: "http://gogs:3000/gogs/wildfly-swarm-s2i.git"
+      checkout scm
       
     stage 'Update BuildConfig Version'
       
@@ -20,11 +20,11 @@ node {
       sh """
        set +x 
       
-       currentOutputName=\$(oc get bc ${swarmBase} -n ${infraProject} --template='{{ .spec.output.to.name }}')
+       currentOutputName=\$(oc get bc ${baseImage} -n ${baseImageProject} --template='{{ .spec.output.to.name }}')
        
        newImageName=\${currentOutputName%:*}:${buildVersion}
        
-       oc patch bc ${swarmBase} -n ${infraProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
+       oc patch bc ${baseImage} -n ${baseImageProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
        
       """
     stage "Build Image"
@@ -34,16 +34,16 @@ node {
       
       sh """
         set +x
-        oc start-build ${swarmBase} -n ${infraProject} --follow=true --wait=true --from-dir="${WORKSPACE}/"
+        oc start-build ${baseImage} -n ${baseImageProject} --follow=true --wait=true --from-dir="${WORKSPACE}/"
       """
     stage "Tagging Image"
       login()
       
       sh """
         set +x
-        oc tag ${infraProject}/${swarmBase}:${buildVersion} ${infraProject}/${swarmBase}:${finalTagVersion}
+        oc tag ${baseImageProject}/${baseImage}:${buildVersion} ${baseImageProject}/${baseImage}:${finalTagVersion}
         
-        oc tag ${infraProject}/${swarmBase}:${finalTagVersion} openshift/${swarmBase}:${finalTagVersion}
+        oc tag ${baseImageProject}/${baseImage}:${finalTagVersion} openshift/${baseImage}:${finalTagVersion}
       """
 }
 

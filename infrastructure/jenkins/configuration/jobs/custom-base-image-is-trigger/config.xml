@@ -6,7 +6,7 @@
   <keepDependencies>false</keepDependencies>
   <properties/>
   <scm class="com.openshift.jenkins.plugins.pipeline.OpenShiftImageStreams" plugin="openshift-pipeline@1.0.17">
-    <imageStreamName>swarm-centos</imageStreamName>
+    <imageStreamName>base-centos</imageStreamName>
     <tag>latest</tag>
     <apiURL>https://kubernetes.default.svc.cluster.local</apiURL>
     <namespace>openshift</namespace>
@@ -30,7 +30,7 @@
       <configs>
         <hudson.plugins.parameterizedtrigger.BuildTriggerConfig>
           <configs class="empty-list"/>
-          <projects>swarm-infra</projects>
+          <projects>custom-base-image-pipeline</projects>
           <condition>SUCCESS</condition>
           <triggerWithNoParameters>false</triggerWithNoParameters>
         </hudson.plugins.parameterizedtrigger.BuildTriggerConfig>

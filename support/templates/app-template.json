@@ -2,10 +2,10 @@
     "kind": "Template",
     "apiVersion": "v1",
     "metadata": {
-        "name": "swarm-app",
+        "name": "app",
         "creationTimestamp": null,
         "annotations": {
-            "description": "Application template for the Swarm Application",
+            "description": "Template for the Application",
             "iconClass": "icon-jboss",
             "tags": "javaee,java"
         }
@@ -87,7 +87,7 @@
                         "from": {
                             "kind": "ImageStreamTag",
                             "namespace": "${IMAGE_STREAM_NAMESPACE}",
-                            "name": "${SWARM_BASE_IMAGE}:${SWARM_BASE_TAG}"
+                            "name": "${CUSTOM_BASE_IMAGE}:${CUSTOM_BASE_IMAGE_TAG}"
                         }
                     }
                 },
@@ -181,7 +181,7 @@
                                 ],
                                 "env": [
                                     {
-                                        "name": "SWARM_POD_NAME",
+                                        "name": "APP_POD_NAME",
                                         "valueFrom": {
                                             "fieldRef": {
                                                 "fieldPath": "metadata.name"
@@ -189,7 +189,7 @@
                                         }
                                     },
                                     {
-                                        "name": "SWARM_POD_NAMESPACE",
+                                        "name": "APP_POD_NAMESPACE",
                                         "valueFrom": {
                                             "fieldRef": {
                                                 "fieldPath": "metadata.namespace"
@@ -208,7 +208,7 @@
         {
             "name": "APPLICATION_NAME",
             "description": "The name for the application.",
-            "value": "swarm-app",
+            "value": "app",
             "required": true
         },
         {
@@ -216,14 +216,14 @@
             "description": "Custom hostname for http service route.  Leave blank for default hostname, e.g.: \u003capplication-name\u003e-\u003cproject\u003e.\u003cdefault-domain-suffix\u003e"
         },
         {
-            "name": "SWARM_BASE_IMAGE",
-            "description": "Name of the swarm base image.",
-            "value": "swarm-s2i",
+            "name": "CUSTOM_BASE_IMAGE",
+            "description": "Name of the custom base image.",
+            "value": "custom-base-image",
             "required": true
         },
         {
-            "name": "SWARM_BASE_TAG",
-            "description": "Name of the swarm base image tag.",
+            "name": "CUSTOM_BASE_IMAGE_TAG",
+            "description": "Name of the custom base image tag.",
             "value": "latest",
             "required": true
         },
@@ -235,6 +235,6 @@
         }
     ],
     "labels": {
-        "template": "swarm-app"
+        "template": "app"
     }
 }
