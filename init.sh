@@ -13,6 +13,7 @@ CUSTOM_BASE_IMAGE_PROJECT="custom-base-image"
 
 OSE_CI_PROJECT="ci"
 OSE_API_APP_DEV="api-app-dev"
+OSE_API_APP_UAT="api-app-uat"
 OSE_API_APP_PROD="api-app-prod"
 
 
@@ -87,6 +88,12 @@ echo "Creating new App Dev Project (${OSE_API_APP_DEV})..."
 echo
 oc new-project ${OSE_API_APP_DEV}
 
+# Create App UAT Project
+echo
+echo "Creating new App UAT Project (${OSE_API_APP_UAT})..."
+echo
+oc new-project ${OSE_API_APP_UAT}
+
 # Create App Prod Project
 echo
 echo "Creating new App Prod Project (${OSE_API_APP_PROD})..."
@@ -97,16 +104,19 @@ oc new-project ${OSE_API_APP_PROD}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_CI_PROJECT}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${CUSTOM_BASE_IMAGE_PROJECT}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_API_APP_DEV}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_API_APP_UAT}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_API_APP_PROD}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n openshift
 
 # Grant Default Service Account in Each Project Editt Access
 oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_DEV}:default -n ${OSE_API_APP_DEV}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_UAT}:default -n ${OSE_API_APP_UAT}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_PROD}:default -n ${OSE_API_APP_PROD}
 
 
 # Grant Higher Level Service Account Access to the Dev Project for ImageStream Tagging
 # TODO: Refactor to only ImagePuller role
+oc policy add-role-to-user edit system:serviceaccount:${OSE_API_UAT_PROD}:default -n ${OSE_API_APP_DEV}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_PROD}:default -n ${OSE_API_APP_DEV}
 
 
@@ -219,7 +229,7 @@ echo
 oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/custom-base-image $GOGS_POD:/tmp/
 oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/custom-base-image && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
 curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/custom-base-image","uid": 1,"repo_name": "custom-base-image"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
-curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/custom-base-image/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/custom-base-image/hooks
+curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/custom-base-image-pipeline/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/custom-base-image/hooks
 
 echo
 echo "Setting up OSE API App repository..."
@@ -227,7 +237,7 @@ echo
 oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/ose-api-app $GOGS_POD:/tmp/
 oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/ose-api-app && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
 curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/ose-api-app","uid": 1,"repo_name": "ose-api-app"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
-curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/ose-api-app/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/ose-api-app/hooks
+curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/ose-api-app-pipeline/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/ose-api-app/hooks
 
 
 # Process Jenkins Agent Template
@@ -296,6 +306,20 @@ oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=CUSTOM_B
 
 
 #TODO: Delete builds as well?
+
+oc project ${OSE_API_APP_UAT}
+
+echo
+echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_UAT} project..."
+echo
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app | oc create -n ${OSE_API_APP_UAT} -f-
+
+# Delete BuildConfig object as it is not needed in this project
+echo
+echo "Deleting BuildConfig in the ${OSE_API_APP_UAT} project..."
+echo
+oc delete bc ose-api-app -n ${OSE_API_APP_UAT}
+
 
 oc project ${OSE_API_APP_PROD}
 

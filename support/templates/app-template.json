@@ -166,10 +166,19 @@
                                 "name": "${APPLICATION_NAME}",
                                 "image": "${APPLICATION_NAME}",
                                 "livenessProbe": {
-                                   "tcpSocket": {
-                                      "port": 8080
+                                   "httpGet": {
+                                      "port": 8080,
+                                      "path": "/"
                                    },
                                    "initialDelaySeconds": 30,
+                                   "timeoutSeconds": 1
+                                },
+                                "readinessProbe": {
+                                   "httpGet": {
+                                      "port": 8080,
+                                      "path": "/"
+                                   },
+                                   "initialDelaySeconds": 5,
                                    "timeoutSeconds": 1
                                 },
                                 "ports": [

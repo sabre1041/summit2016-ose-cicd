@@ -36,6 +36,7 @@ node('ose-agent') {
         set +x
         oc start-build ${baseImage} -n ${baseImageProject} --follow=true --wait=true --from-dir="${WORKSPACE}/"
       """
+
     stage "Tagging Image"
       login()
       

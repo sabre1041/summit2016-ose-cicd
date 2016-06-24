@@ -5,6 +5,7 @@ node('ose-agent') {
     env.KUBECONFIG = pwd() + "/.kubeconfig"
     def appName = "ose-api-app"
     def devProject = "api-app-dev"
+    def uatProject = "api-app-uat"
     def prodProject = "api-app-prod"
    
    stage 'Checkout'
@@ -30,62 +31,86 @@ node('ose-agent') {
             processStageResult()
         }
         
-    stage "Update BuildConfig Version"
+      stage "OpenShift Dev Build"
         
-        def version = parseVersion("${WORKSPACE}/pom.xml")
+      def version = parseVersion("${WORKSPACE}/pom.xml")
+      
       login()
       
       sh """
        set +x 
-      
-       currentOutputName=\$(oc get bc ${appName} -n ${devProject} --template='{{ .spec.output.to.name }}')
-       
-       newImageName=\${currentOutputName%:*}:${version}
-       
-       oc patch bc ${appName} -n ${devProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
-       
-      """
 
-        
-    stage "OpenShift Dev Build"
-    
-      login()
-    
-      sh """
-        set +x
-        mkdir -p ${WORKSPACE}//target/s2i-build/deployments
-        cp ${WORKSPACE}//target/*.jar ${WORKSPACE}//target/s2i-build/deployments/
-        oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir="${WORKSPACE}//target/s2i-build"
+       currentOutputName=\$(oc get bc ${appName} -n ${devProject} --template='{{ .spec.output.to.name }}')
+
+       newImageName=\${currentOutputName%:*}:${version}
+
+       oc patch bc ${appName} -n ${devProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
+
+       mkdir -p ${WORKSPACE}//target/s2i-build/deployments
+       cp ${WORKSPACE}//target/*.jar ${WORKSPACE}//target/s2i-build/deployments/
+       oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir="${WORKSPACE}//target/s2i-build"
+
       """
       
       stage "Dev Deployment"
-      
+
         login()
-        
+
         deployApp(appName, devProject, version)
-        
+
         validateDeployment(appName,devProject)
-      
+
+      stage "Promote to UAT"
+
+        login()
+
+        sh """
+          set +x
+
+          echo "Promoting application to Prod Environment"
+
+          oc tag ${devProject}/${appName}:${version} ${uatProject}/${appName}:${version}
+
+          # Sleep for a few moments
+          sleep 5
+
+        """
+
+        deployApp(appName, uatProject, version)
+
+        validateDeployment(appName,uatProject)
+
+      stage "Acceptance Checking"
+
+        sh """
+          set +x
+
+          echo "Acceptance Testing..."
+
+          //TODO: Perform Acceptance checking
+
+        """
+
     stage "Promote to Production"
 
       input "Do you want to promote the ${appName} to Production?"
 
       login()
-      
+
       sh """
         set +x
-        
+
         echo "Promoting application to Prod Environment"
-        
-        oc tag ${devProject}/${appName}:${version} ${prodProject}/${appName}:${version}
-        
+
+        oc tag ${uatProject}/${appName}:${version} ${prodProject}/${appName}:${version}
+
         # Sleep for a few moments
         sleep 5
-        
+
       """
-      
+
       deployApp(appName, prodProject, version)
-      
+
       validateDeployment(appName,prodProject)
 
 
@@ -121,7 +146,7 @@ def deployApp(appName, namespace, version) {
           oc patch dc/${appName} -n ${namespace} -p "{\\"spec\\":{\\"template\\":{\\"spec\\":{\\"containers\\":[{\\"name\\":\\"${appName}\\",\\"image\\": \\"\${imageReference}\\" } ]}}, \\"triggers\\": [ { \\"type\\": \\"ImageChange\\", \\"imageChangeParams\\": { \\"containerNames\\": [ \\"${appName}\\" ], \\"from\\": { \\"kind\\": \\"ImageStreamTag\\", \\"name\\": \\"\${newDeploymentImageName}\\" } } } ] }}"
 
           oc deploy ${appName} -n ${namespace} --latest
-          
+
           # Sleep for a few moments
           sleep 5
         """
@@ -137,36 +162,36 @@ def validateDeployment(String dcName, String namespace) {
       COUNTER=0
       DELAY=10
       MAX_COUNTER=30
-      
+
       echo "Validating deployment of ${dcName} in project ${namespace}"
-      
+
       LATEST_DC_VERSION=\$(oc get dc ${dcName} -n ${namespace} --template='{{ .status.latestVersion }}')
-      
+
       RC_NAME=${dcName}-\${LATEST_DC_VERSION}
-      
+
       while [ \$COUNTER -lt \$MAX_COUNTER ]
       do
-      
+
         REPLICAS=\$(oc get rc \${RC_NAME} -n ${namespace} --template="{{ .spec.replicas }}")
         CURRENT_REPLICAS=\$(oc get rc \${RC_NAME} -n ${namespace} --template="{{ .status.replicas }}")
-        
+
         if [ \$COUNTER -lt \$MAX_COUNTER ]; then
-        
+
           if [ \$CURRENT_REPLICAS -eq \$REPLICAS ]; then
             echo
             break
           fi
-          
+
           echo -n "."
           COUNTER=\$(( \$COUNTER + 1 ))
-        
+
         fi
-        
+
         if [ \$COUNTER -eq \$MAX_COUNTER ]; then
           echo "Max Validation Attempts Exceeded. Failed Verifying Application Deployment..."
           exit 1
         fi
-    
+
       done
     
     """
