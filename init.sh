@@ -54,7 +54,7 @@ function wait_for_endpoint_registration() {
     
     while true
     do
-        oc get ep $ENDPOINT -n $NAMESPACE -o yaml | grep "\- addresses:"
+        oc get ep $ENDPOINT -n $NAMESPACE -o yaml | grep "\- addresses:" >/dev/null 2>&1
         
         if [ $? -eq 0 ]; then
             break
@@ -67,38 +67,46 @@ function wait_for_endpoint_registration() {
     set -e
 }
 
+echo
+echo "Beginning setup of demo environmnet..."
+echo
+
 # Login to OSE
-oc login -u ${OSE_CLI_USER} -p ${OSE_CLI_PASSWORD} ${OSE_CLI_HOST} --insecure-skip-tls-verify=true
+oc login -u ${OSE_CLI_USER} -p ${OSE_CLI_PASSWORD} ${OSE_CLI_HOST} --insecure-skip-tls-verify=true >/dev/null 2>&1
 
 # Create CI Project
 echo
 echo "Creating new CI Project (${OSE_CI_PROJECT})..."
 echo
-oc new-project ${OSE_CI_PROJECT}
+oc new-project ${OSE_CI_PROJECT} >/dev/null 2>&1
 
 # Create Custom Base Image Project
 echo
 echo "Creating new Custom Base Image Project (${CUSTOM_BASE_IMAGE_PROJECT})..."
 echo
-oc new-project ${CUSTOM_BASE_IMAGE_PROJECT}
+oc new-project ${CUSTOM_BASE_IMAGE_PROJECT} >/dev/null 2>&1
 
 # Create App Dev Project
 echo
 echo "Creating new App Dev Project (${OSE_API_APP_DEV})..."
 echo
-oc new-project ${OSE_API_APP_DEV}
+oc new-project ${OSE_API_APP_DEV} >/dev/null 2>&1
 
 # Create App UAT Project
 echo
 echo "Creating new App UAT Project (${OSE_API_APP_UAT})..."
 echo
-oc new-project ${OSE_API_APP_UAT}
+oc new-project ${OSE_API_APP_UAT} >/dev/null 2>&1
 
 # Create App Prod Project
 echo
 echo "Creating new App Prod Project (${OSE_API_APP_PROD})..."
 echo
-oc new-project ${OSE_API_APP_PROD}
+oc new-project ${OSE_API_APP_PROD} >/dev/null 2>&1
+
+echo
+echo "Configuring project permissions..."
+echo
 
 # Grant Default CI Account Edit Access to All Projects and OpenShift Project
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_CI_PROJECT}
@@ -113,17 +121,12 @@ oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_DEV}:default
 oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_UAT}:default -n ${OSE_API_APP_UAT}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_PROD}:default -n ${OSE_API_APP_PROD}
 
-
 # Grant Higher Level Service Account Access to the Dev Project for ImageStream Tagging
-# TODO: Refactor to only ImagePuller role
-oc policy add-role-to-user edit system:serviceaccount:${OSE_API_UAT_PROD}:default -n ${OSE_API_APP_DEV}
+oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_UAT}:default -n ${OSE_API_APP_DEV}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_PROD}:default -n ${OSE_API_APP_DEV}
-
 
 # Grant Access For Builder Account to Pull Images in Dev Project
 oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_DEV}:builder -n ${CUSTOM_BASE_IMAGE_PROJECT}
-
-
 
 # CI Project
 
@@ -131,19 +134,19 @@ oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_DEV}:builder
 echo
 echo "Waiting for RHEL ImageStream Template..."
 echo
-oc create -n ${OSE_CI_PROJECT} -f"${SCRIPT_BASE_DIR}/support/templates/rhel7-is.json"
+oc create -n ${OSE_CI_PROJECT} -f"${SCRIPT_BASE_DIR}/support/templates/rhel7-is.json" >/dev/null 2>&1
 
 # Import Upstream Image
 echo
 echo "Importing RHEL7 ImageStream..."
 echo
-oc import-image -n ${OSE_CI_PROJECT} rhel7
+oc import-image -n ${OSE_CI_PROJECT} rhel7 >/dev/null 2>&1
 
 # Process Nexus Template
 echo
 echo "Processing Nexus Template..."
 echo
-oc process -v APPLICATION_NAME=nexus -f "${SCRIPT_BASE_DIR}/support/templates/nexus-ephemeral-template.json" | oc -n ${OSE_CI_PROJECT} create -f -
+oc process -v APPLICATION_NAME=nexus -f "${SCRIPT_BASE_DIR}/support/templates/nexus-ephemeral-template.json" | oc -n ${OSE_CI_PROJECT} create -f - >/dev/null 2>&1
 
 echo
 echo "Waiting for Nexus build to begin..."
@@ -151,29 +154,29 @@ echo
 wait_for_running_build "nexus" "${OSE_CI_PROJECT}"
 
 # Cancel initial build since this is a binary build with no content
-oc cancel-build -n ${OSE_CI_PROJECT} nexus-1
+oc cancel-build -n ${OSE_CI_PROJECT} nexus-1 >/dev/null 2>&1
 
 echo
 echo "Starting Nexus binary build..."
 echo
-oc start-build -n ${OSE_CI_PROJECT} nexus --from-dir="${SCRIPT_BASE_DIR}/infrastructure/nexus"
+oc start-build -n ${OSE_CI_PROJECT} nexus --from-dir="${SCRIPT_BASE_DIR}/infrastructure/nexus" >/dev/null 2>&1
 
 wait_for_running_build "nexus" "${OSE_CI_PROJECT}" "2"
 
-oc build-logs -n ${OSE_CI_PROJECT} -f nexus-2
+oc build-logs -n ${OSE_CI_PROJECT} -f nexus-2 
 
 
 echo
 echo "Deploying PostgreSQL for Gogs..."
 echo
-oc process -f $SCRIPT_BASE_DIR/support/templates/postgresql-persistent.json -v=POSTGRESQL_DATABASE=$POSTGRESQL_DATABASE,POSTGRESQL_USER=$POSTGRESQL_USER,POSTGRESQL_PASSWORD=$POSTGRESQL_PASSWORD  | oc create -n $OSE_CI_PROJECT -f-
+oc process -f $SCRIPT_BASE_DIR/support/templates/postgresql-persistent.json -v=POSTGRESQL_DATABASE=$POSTGRESQL_DATABASE,POSTGRESQL_USER=$POSTGRESQL_USER,POSTGRESQL_PASSWORD=$POSTGRESQL_PASSWORD  | oc create -n $OSE_CI_PROJECT -f- >/dev/null 2>&1
 
 wait_for_endpoint_registration "postgresql" "$OSE_CI_PROJECT"
 
 echo
 echo "Deploying Gogs Server..."
 echo
-oc process -f $SCRIPT_BASE_DIR/support/templates/gogs-persistent-template.json | oc create -n $OSE_CI_PROJECT -f-
+oc process -f $SCRIPT_BASE_DIR/support/templates/gogs-persistent-template.json | oc create -n $OSE_CI_PROJECT -f- >/dev/null 2>&1
 
 wait_for_endpoint_registration "gogs" "$OSE_CI_PROJECT"
 
@@ -183,6 +186,9 @@ GOGS_POD=$(oc get pods -n $OSE_CI_PROJECT -l=deploymentconfig=gogs --no-headers 
 GOGS_ROUTE=$(oc get routes -n $OSE_CI_PROJECT gogs --template='{{ .spec.host }}')
 
 # Sleep before setting up gogs server
+echo
+echo "Pausing a Moment..."
+echo
 sleep 10
 
 
@@ -218,48 +224,47 @@ then
 fi
 
 echo
-echo "Initialized Gogs Server...."
+echo "Initialized Gogs Server.... Pausing..."
 echo
-
 
 sleep 10
 
 echo
 echo "Setting up custom base image git repository..."
 echo
-oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/custom-base-image $GOGS_POD:/tmp/
-oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/custom-base-image && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
-curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/custom-base-image","uid": 1,"repo_name": "custom-base-image"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
-curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/custom-base-image-pipeline/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/custom-base-image/hooks
+oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/custom-base-image $GOGS_POD:/tmp/ >/dev/null 2>&1
+oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/custom-base-image && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'" >/dev/null 2>&1
+curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/custom-base-image","uid": 1,"repo_name": "custom-base-image"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate >/dev/null 2>&1
+curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/custom-base-image-pipeline/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/custom-base-image/hooks >/dev/null 2>&1
 
 echo
-echo "Setting up OSE API App repository..."
+echo "Setting up OSE API App git repository..."
 echo
-oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/ose-api-app $GOGS_POD:/tmp/
-oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/ose-api-app && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'"
-curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/ose-api-app","uid": 1,"repo_name": "ose-api-app"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
-curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/ose-api-app-pipeline/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/ose-api-app/hooks
+oc rsync -n $OSE_CI_PROJECT $SCRIPT_BASE_DIR/ose-api-app $GOGS_POD:/tmp/ >/dev/null 2>&1
+oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/ose-api-app && git init && git config --global user.email 'gogs@redhat.com' && git config --global user.name 'gogs' && git add . &&  git commit -m 'initial commit'" >/dev/null 2>&1
+curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/ose-api-app","uid": 1,"repo_name": "ose-api-app"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate >/dev/null 2>&1
+curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/ose-api-app-pipeline/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/ose-api-app/hooks >/dev/null 2>&1
 
 echo
 echo "Setting up persistent gogs configuration..."
 echo
 
 mkdir -p $SCRIPT_BASE_DIR/installgogs
-oc rsync -n ${OSE_CI_PROJECT} $GOGS_POD:/etc/gogs installgogs/
-oc secrets new gogs-config -n ${OSE_CI_PROJECT} $SCRIPT_BASE_DIR/installgogs/gogs/conf
-oc volume dc/gogs -n ${OSE_CI_PROJECT} --add --overwrite --name=config-volume -m /etc/gogs/conf/ --type=secret --secret-name=gogs-config
+oc rsync -n ${OSE_CI_PROJECT} $GOGS_POD:/etc/gogs installgogs/ >/dev/null 2>&1
+oc secrets new gogs-config -n ${OSE_CI_PROJECT} $SCRIPT_BASE_DIR/installgogs/gogs/conf >/dev/null 2>&1
+oc volume dc/gogs -n ${OSE_CI_PROJECT} --add --overwrite --name=config-volume -m /etc/gogs/conf/ --type=secret --secret-name=gogs-config >/dev/null 2>&1
 rm -rf $SCRIPT_BASE_DIR/installgogs
 
 # Process Jenkins Agent Template
 echo
 echo "Processing Jenkins Agent Template..."
 echo
-oc process -v APPLICATION_NAME=jenkins-agent -f "${SCRIPT_BASE_DIR}/support/templates/jenkins-agent-template.json" | oc -n ${OSE_CI_PROJECT} create -f -
+oc process -v APPLICATION_NAME=jenkins-agent -f "${SCRIPT_BASE_DIR}/support/templates/jenkins-agent-template.json" | oc -n ${OSE_CI_PROJECT} create -f - >/dev/null 2>&1
 
 echo
 echo "Starting Jenkins Agent binary build..."
 echo
-oc start-build -n ${OSE_CI_PROJECT} jenkins-agent --from-dir="${SCRIPT_BASE_DIR}/infrastructure/jenkins-agent"
+oc start-build -n ${OSE_CI_PROJECT} jenkins-agent --from-dir="${SCRIPT_BASE_DIR}/infrastructure/jenkins-agent" >/dev/null 2>&1
 
 wait_for_running_build "jenkins-agent" "${OSE_CI_PROJECT}"
 
@@ -269,30 +274,30 @@ oc build-logs -n ${OSE_CI_PROJECT} -f jenkins-agent-1
 echo
 echo "Processing Jenkins Template..."
 echo
-oc process -v APPLICATION_NAME=jenkins -f "${SCRIPT_BASE_DIR}/support/templates/jenkins-template.json" | oc -n ${OSE_CI_PROJECT} create -f -
+oc process -v APPLICATION_NAME=jenkins -f "${SCRIPT_BASE_DIR}/support/templates/jenkins-template.json" | oc -n ${OSE_CI_PROJECT} create -f - >/dev/null 2>&1
 
 echo
 echo "Starting Jenkins binary build..."
 echo
-oc start-build -n ${OSE_CI_PROJECT} jenkins --from-dir="${SCRIPT_BASE_DIR}/infrastructure/jenkins"
+oc start-build -n ${OSE_CI_PROJECT} jenkins --from-dir="${SCRIPT_BASE_DIR}/infrastructure/jenkins" >/dev/null 2>&1
 
 wait_for_running_build "jenkins" "${OSE_CI_PROJECT}"
 
 oc build-logs -n ${OSE_CI_PROJECT} -f jenkins-1
 
 
-oc project ${CUSTOM_BASE_IMAGE_PROJECT}
+oc project ${CUSTOM_BASE_IMAGE_PROJECT} >/dev/null 2>&1
 
 
 echo
 echo "Instantiating the base builder and associated dependencies in the ${CUSTOM_BASE_IMAGE_PROJECT} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/custom-base-image-template.json" | oc -n ${CUSTOM_BASE_IMAGE_PROJECT} create -f-
+oc process -f "$SCRIPT_BASE_DIR/support/templates/custom-base-image-template.json" | oc -n ${CUSTOM_BASE_IMAGE_PROJECT} create -f- >/dev/null 2>&1
 
 echo
 echo "Importing upstream OpenShift Base Centos 7 Image..."
 echo
-oc import-image base-centos -n ${CUSTOM_BASE_IMAGE_PROJECT}
+oc import-image base-centos -n ${CUSTOM_BASE_IMAGE_PROJECT} >/dev/null 2>&1
 
 echo
 echo "Waiting for custom base image build to begin..."
@@ -303,46 +308,47 @@ wait_for_running_build "custom-base-image" "${CUSTOM_BASE_IMAGE_PROJECT}"
 echo
 echo "Cancelling initial custom base image build..."
 echo
-oc cancel-build custom-base-image-1 -n ${CUSTOM_BASE_IMAGE_PROJECT}
+oc cancel-build custom-base-image-1 -n ${CUSTOM_BASE_IMAGE_PROJECT} >/dev/null 2>&1
 
 
 
-oc project ${OSE_API_APP_DEV}
+oc project ${OSE_API_APP_DEV} >/dev/null 2>&1
 
 echo
 echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_DEV} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=CUSTOM_BASE_IMAGE_TAG=1.0,APPLICATION_NAME=ose-api-app | oc -n ${OSE_API_APP_DEV} create -f-
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=CUSTOM_BASE_IMAGE_TAG=1.0,APPLICATION_NAME=ose-api-app | oc -n ${OSE_API_APP_DEV} create -f- >/dev/null 2>&1
 
 
-#TODO: Delete builds as well?
-
-oc project ${OSE_API_APP_UAT}
+oc project ${OSE_API_APP_UAT} >/dev/null 2>&1
 
 echo
 echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_UAT} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app | oc create -n ${OSE_API_APP_UAT} -f-
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app | oc create -n ${OSE_API_APP_UAT} -f-  >/dev/null 2>&1
 
 # Delete BuildConfig object as it is not needed in this project
 echo
 echo "Deleting BuildConfig in the ${OSE_API_APP_UAT} project..."
 echo
-oc delete bc ose-api-app -n ${OSE_API_APP_UAT}
+oc delete bc ose-api-app -n ${OSE_API_APP_UAT} >/dev/null 2>&1
 
 
-oc project ${OSE_API_APP_PROD}
+oc project ${OSE_API_APP_PROD} >/dev/null 2>&1
 
 echo
 echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_PROD} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app | oc create -n ${OSE_API_APP_PROD} -f-
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app | oc create -n ${OSE_API_APP_PROD} -f- >/dev/null 2>&1
 
 # Delete BuildConfig object as it is not needed in this project
 echo
 echo "Deleting BuildConfig in the ${OSE_API_APP_PROD} project..."
 echo
-oc delete bc ose-api-app -n ${OSE_API_APP_PROD}
+oc delete bc ose-api-app -n ${OSE_API_APP_PROD} >/dev/null 2>&1
+
+# Go back to CI project
+oc project ${OSE_CI_PROJECT} >/dev/null 2>&1
 
 echo
 echo "=================================="

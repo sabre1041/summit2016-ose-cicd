@@ -80,16 +80,9 @@ node('ose-agent') {
 
         validateDeployment(appName,uatProject)
 
-      stage "Acceptance Checking"
+    stage "Acceptance Checking"
 
-        sh """
-          set +x
-
-          echo "Acceptance Testing..."
-
-          # TODO: Perform Acceptance checking
-
-        """
+        acceptanceCheck(appName, uatProject)
 
     stage "Promote to Production"
 
@@ -140,7 +133,7 @@ def deployApp(appName, namespace, version) {
           set +x
 
           newDeploymentImageName=${appName}:${version}
-          
+
           imageReference=\$(oc get is ${appName} -n ${namespace} -o jsonpath="{.status.tags[?(@.tag==\\"${version}\\")].items[*].dockerImageReference}")
 
           oc patch dc/${appName} -n ${namespace} -p "{\\"spec\\":{\\"template\\":{\\"spec\\":{\\"containers\\":[{\\"name\\":\\"${appName}\\",\\"image\\": \\"\${imageReference}\\" } ]}}, \\"triggers\\": [ { \\"type\\": \\"ImageChange\\", \\"imageChangeParams\\": { \\"containerNames\\": [ \\"${appName}\\" ], \\"from\\": { \\"kind\\": \\"ImageStreamTag\\", \\"name\\": \\"\${newDeploymentImageName}\\" } } } ] }}"
@@ -151,6 +144,44 @@ def deployApp(appName, namespace, version) {
           sleep 5
         """
 
+    
+}
+
+def acceptanceCheck(String appName, String namespace) {
+
+    sh """
+      set +x
+
+      COUNTER=0
+      DELAY=5
+      MAX_COUNTER=30
+
+      echo "Running Acceptance Check of ${appName} in project ${namespace}"
+
+     set +e
+
+      while [ \$COUNTER -lt \$MAX_COUNTER ]
+      do
+
+        RESPONSE=\$(curl -s -o /dev/null -w '%{http_code}\\n' http://${appName}.${namespace}.svc.cluster.local:8080/rest/api/pods)
+    
+        if [ \$RESPONSE -eq 200 ]; then
+            echo 
+            echo "Application Verified"
+            break
+        fi
+    
+        if [ \$COUNTER -eq \$MAX_COUNTER ]; then
+          echo "Max Validation Attempts Exceeded. Failed Verifying Application Deployment..."
+          exit 1
+        fi
+        
+        sleep \$DELAY
+
+      done
+      
+      set -e
+      """
     
 }
 
@@ -169,30 +200,43 @@ def validateDeployment(String dcName, String namespace) {
 
       RC_NAME=${dcName}-\${LATEST_DC_VERSION}
 
+      set +e
+
       while [ \$COUNTER -lt \$MAX_COUNTER ]
       do
 
-        REPLICAS=\$(oc get rc \${RC_NAME} -n ${namespace} --template="{{ .spec.replicas }}")
-        CURRENT_REPLICAS=\$(oc get rc \${RC_NAME} -n ${namespace} --template="{{ .status.replicas }}")
+        RC_ANNOTATION_RESPONSE=\$(oc get rc -n ${namespace} \$RC_NAME --template="{{.metadata.annotations}}")
+        
+        echo "\$RC_ANNOTATION_RESPONSE" | grep openshift.io/deployment.phase:Complete >/dev/null 2>&1
 
+        if [ \$? -eq 0 ]; then
+          echo "Deployment Succeeded!"
+          break  
+        fi
+
+        echo "\$RC_ANNOTATION_RESPONSE" | grep -E 'openshift.io/deployment.phase:Failed|openshift.io/deployment.phase:Cancelled' >/dev/null 2>&1
+        if [ \$? -eq 0 ]; then
+          echo "Deployment Failed"
+          exit 1 
+        fi
+        
         if [ \$COUNTER -lt \$MAX_COUNTER ]; then
-
-          if [ \$CURRENT_REPLICAS -eq \$REPLICAS ]; then
-            echo
-            break
-          fi
 
           echo -n "."
           COUNTER=\$(( \$COUNTER + 1 ))
-
+          
         fi
 
         if [ \$COUNTER -eq \$MAX_COUNTER ]; then
           echo "Max Validation Attempts Exceeded. Failed Verifying Application Deployment..."
           exit 1
         fi
+        
+        sleep \$DELAY
 
       done
-    
+
+      set -e
+
     """
 }
