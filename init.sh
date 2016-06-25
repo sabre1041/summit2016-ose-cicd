@@ -143,7 +143,7 @@ oc import-image -n ${OSE_CI_PROJECT} rhel7
 echo
 echo "Processing Nexus Template..."
 echo
-oc process -v APPLICATION_NAME=nexus -f "${SCRIPT_BASE_DIR}/support/templates/nexus-template.json" | oc -n ${OSE_CI_PROJECT} create -f -
+oc process -v APPLICATION_NAME=nexus -f "${SCRIPT_BASE_DIR}/support/templates/nexus-ephemeral-template.json" | oc -n ${OSE_CI_PROJECT} create -f -
 
 echo
 echo "Waiting for Nexus build to begin..."
@@ -166,14 +166,14 @@ oc build-logs -n ${OSE_CI_PROJECT} -f nexus-2
 echo
 echo "Deploying PostgreSQL for Gogs..."
 echo
-oc process -f $SCRIPT_BASE_DIR/support/templates/postgresql-ephemeral.json -v=POSTGRESQL_DATABASE=$POSTGRESQL_DATABASE,POSTGRESQL_USER=$POSTGRESQL_USER,POSTGRESQL_PASSWORD=$POSTGRESQL_PASSWORD  | oc create -n $OSE_CI_PROJECT -f-
+oc process -f $SCRIPT_BASE_DIR/support/templates/postgresql-persistent.json -v=POSTGRESQL_DATABASE=$POSTGRESQL_DATABASE,POSTGRESQL_USER=$POSTGRESQL_USER,POSTGRESQL_PASSWORD=$POSTGRESQL_PASSWORD  | oc create -n $OSE_CI_PROJECT -f-
 
 wait_for_endpoint_registration "postgresql" "$OSE_CI_PROJECT"
 
 echo
 echo "Deploying Gogs Server..."
 echo
-oc process -f $SCRIPT_BASE_DIR/support/templates/gogs-template.json | oc create -n $OSE_CI_PROJECT -f-
+oc process -f $SCRIPT_BASE_DIR/support/templates/gogs-persistent-template.json | oc create -n $OSE_CI_PROJECT -f-
 
 wait_for_endpoint_registration "gogs" "$OSE_CI_PROJECT"
 
@@ -221,6 +221,7 @@ echo
 echo "Initialized Gogs Server...."
 echo
 
+
 sleep 10
 
 echo
@@ -239,6 +240,15 @@ oc rsh -n $OSE_CI_PROJECT -t $GOGS_POD bash -c "cd /tmp/ose-api-app && git init 
 curl -H "Content-Type: application/json" -X POST -d '{"clone_addr": "/tmp/ose-api-app","uid": 1,"repo_name": "ose-api-app"}' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/migrate
 curl -H "Content-Type: application/json" -X POST -d '{"type": "gogs","config": { "url": "http://admin:password@jenkins:8080/job/ose-api-app-pipeline/build?delay=0", "content_type": "json" }, "active": true }' --user $GOGS_ADMIN_USER:$GOGS_ADMIN_PASSWORD http://$GOGS_ROUTE/api/v1/repos/gogs/ose-api-app/hooks
 
+echo
+echo "Setting up persistent gogs configuration..."
+echo
+
+mkdir -p $SCRIPT_BASE_DIR/installgogs
+oc rsync -n ${OSE_CI_PROJECT} $GOGS_POD:/etc/gogs installgogs/
+oc secrets new gogs-config -n ${OSE_CI_PROJECT} $SCRIPT_BASE_DIR/installgogs/gogs/conf
+oc volume dc/gogs -n ${OSE_CI_PROJECT} --add --overwrite --name=config-volume -m /etc/gogs/conf/ --type=secret --secret-name=gogs-config
+rm -rf $SCRIPT_BASE_DIR/installgogs
 
 # Process Jenkins Agent Template
 echo

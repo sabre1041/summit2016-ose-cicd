@@ -2,7 +2,7 @@
     "kind": "Template",
     "apiVersion": "v1",
     "metadata": {
-        "name": "gogs",
+        "name": "gogs-persistent",
         "annotations": {
             "description": "Gogs",
             "tags": "gogs"
@@ -70,6 +70,23 @@
                 "to": {
                     "kind": "Service",
                     "name": "${APPLICATION_NAME}"
+                }
+            }
+        },
+        {
+            "kind": "PersistentVolumeClaim",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APPLICATION_NAME}"
+            },
+            "spec": {
+                "accessModes": [
+                    "ReadWriteOnce"
+                ],
+                "resources": {
+                    "requests": {
+                        "storage": "${VOLUME_CAPACITY}"
+                    }
                 }
             }
         },
@@ -142,12 +159,26 @@
                                     "failureThreshold": 3
                                 },
                                 "resources": {},
+                                "volumeMounts": [
+                                    {
+                                        "name": "${APPLICATION_NAME}-data",
+                                        "mountPath": "/home/gogs/gogs-repositories"
+                                    }
+                                ],
                                 "terminationMessagePath": "/dev/termination-log",
                                 "imagePullPolicy": "Always",
                                 "capabilities": {},
                                 "securityContext": {
                                     "capabilities": {},
                                     "privileged": false
+                                }
+                            }
+                        ],
+                        "volumes": [
+                            {
+                                "name": "${APPLICATION_NAME}-data",
+                                "persistentVolumeClaim": {
+                                    "claimName": "${APPLICATION_NAME}"
                                 }
                             }
                         ],
@@ -168,6 +199,12 @@
            "description": "Custom hostname.  Leave blank for default hostname, e.g.: <application-name>.<project>.<default-domain-suffix>",
            "name": "APPLICATION_HOSTNAME",
            "displayName": "Application hostname"
+        },
+        {
+            "name": "VOLUME_CAPACITY",
+            "description": "Volume space available for data, e.g. 512Mi, 2Gi",
+            "value": "1Gi",
+            "required": true
         }
     ],
     "labels": {

@@ -87,7 +87,7 @@ node('ose-agent') {
 
           echo "Acceptance Testing..."
 
-          //TODO: Perform Acceptance checking
+          # TODO: Perform Acceptance checking
 
         """
 
