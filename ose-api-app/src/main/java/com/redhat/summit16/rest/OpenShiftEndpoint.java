@@ -72,16 +72,49 @@ public class OpenShiftEndpoint {
   @Path("scale/{replicas}")
   @Produces(MediaType.APPLICATION_JSON)
   public DeploymentConfig scale(@PathParam("replicas") Integer replicas) {
-	  
+
 	  String deploymentConfigName = getClient().pods().inNamespace(getPodNamespace()).withName(getPodName()).get().getMetadata().getAnnotations().get("openshift.io/deployment-config.name");
-	  
+
 	  DeploymentConfig dc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).edit().editSpec().withReplicas(replicas).endSpec().done();
-	 	  
+
 	  return dc;
-	  
+
   }
   
+  @GET
+  @Path("scaleUp")
+  @Produces(MediaType.APPLICATION_JSON)
+  public DeploymentConfig scaleUp() {
+
+	  String deploymentConfigName = getClient().pods().inNamespace(getPodNamespace()).withName(getPodName()).get().getMetadata().getAnnotations().get("openshift.io/deployment-config.name");
+
+	  DeploymentConfig origDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).get();
+	  Integer replicas = origDc.getSpec().getReplicas();
+
+	  DeploymentConfig updatedDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).edit().editSpec().withReplicas(replicas++).endSpec().done();
+
+	  return updatedDc;
+
+  }
   
+  @GET
+  @Path("scaleDown")
+  @Produces(MediaType.APPLICATION_JSON)
+  public DeploymentConfig scaleDown() {
+
+	  String deploymentConfigName = getClient().pods().inNamespace(getPodNamespace()).withName(getPodName()).get().getMetadata().getAnnotations().get("openshift.io/deployment-config.name");
+
+	  DeploymentConfig origDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).get();
+	  Integer replicas = origDc.getSpec().getReplicas();
+
+	  if (replicas > 0) {
+		  DeploymentConfig updatedDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).edit().editSpec().withReplicas(replicas--).endSpec().done();
+		  return updatedDc;
+	  }
+  
+	  return origDc;
+
+  }
   
   @DELETE
   @Path("pod/name/{name}")
