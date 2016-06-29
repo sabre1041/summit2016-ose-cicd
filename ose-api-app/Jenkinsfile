@@ -1,5 +1,5 @@
 node('ose-agent') {
-    
+
     def WORKSPACE = pwd()
     def mvnHome = tool 'maven'
     env.KUBECONFIG = pwd() + "/.kubeconfig"
@@ -7,17 +7,17 @@ node('ose-agent') {
     def devProject = "api-app-dev"
     def uatProject = "api-app-uat"
     def prodProject = "api-app-prod"
-   
+
    stage 'Checkout'
 
        checkout scm
 
    stage 'Maven Build'
-   
+
         try {
             sh """
             set +x
-            ${mvnHome}/bin/mvn build-helper:parse-version versions:set -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.incrementalVersion}-\${BUILD_NUMBER} 
+            ${mvnHome}/bin/mvn build-helper:parse-version versions:set -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.incrementalVersion}-\${BUILD_NUMBER}
             ${mvnHome}/bin/mvn clean install
             """
 
@@ -30,15 +30,15 @@ node('ose-agent') {
         finally {
             processStageResult()
         }
-        
+
       stage "OpenShift Dev Build"
-        
+
       def version = parseVersion("${WORKSPACE}/pom.xml")
-      
+
       login()
-      
+
       sh """
-       set +x 
+       set +x
 
        currentOutputName=\$(oc get bc ${appName} -n ${devProject} --template='{{ .spec.output.to.name }}')
 
@@ -51,7 +51,7 @@ node('ose-agent') {
        oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir="${WORKSPACE}//target/s2i-build"
 
       """
-      
+
       stage "Dev Deployment"
 
         login()
@@ -67,7 +67,7 @@ node('ose-agent') {
         sh """
           set +x
 
-          echo "Promoting application to Prod Environment"
+          echo "Promoting application to UAT Environment"
 
           oc tag ${devProject}/${appName}:${version} ${uatProject}/${appName}:${version}
 
@@ -144,7 +144,7 @@ def deployApp(appName, namespace, version) {
           sleep 5
         """
 
-    
+
 }
 
 def acceptanceCheck(String appName, String namespace) {
@@ -164,32 +164,32 @@ def acceptanceCheck(String appName, String namespace) {
       do
 
         RESPONSE=\$(curl -s -o /dev/null -w '%{http_code}\\n' http://${appName}.${namespace}.svc.cluster.local:8080/rest/api/pods)
-    
+
         if [ \$RESPONSE -eq 200 ]; then
-            echo 
+            echo
             echo "Application Verified"
             break
         fi
-    
+
         if [ \$COUNTER -eq \$MAX_COUNTER ]; then
           echo "Max Validation Attempts Exceeded. Failed Verifying Application Deployment..."
           exit 1
         fi
-        
+
         sleep \$DELAY
 
       done
-      
+
       set -e
       """
-    
+
 }
 
 def validateDeployment(String dcName, String namespace) {
-    
+
     sh """
       set +x
-    
+
       COUNTER=0
       DELAY=10
       MAX_COUNTER=30
@@ -206,32 +206,32 @@ def validateDeployment(String dcName, String namespace) {
       do
 
         RC_ANNOTATION_RESPONSE=\$(oc get rc -n ${namespace} \$RC_NAME --template="{{.metadata.annotations}}")
-        
+
         echo "\$RC_ANNOTATION_RESPONSE" | grep openshift.io/deployment.phase:Complete >/dev/null 2>&1
 
         if [ \$? -eq 0 ]; then
           echo "Deployment Succeeded!"
-          break  
+          break
         fi
 
         echo "\$RC_ANNOTATION_RESPONSE" | grep -E 'openshift.io/deployment.phase:Failed|openshift.io/deployment.phase:Cancelled' >/dev/null 2>&1
         if [ \$? -eq 0 ]; then
           echo "Deployment Failed"
-          exit 1 
+          exit 1
         fi
-        
+
         if [ \$COUNTER -lt \$MAX_COUNTER ]; then
 
           echo -n "."
           COUNTER=\$(( \$COUNTER + 1 ))
-          
+
         fi
 
         if [ \$COUNTER -eq \$MAX_COUNTER ]; then
           echo "Max Validation Attempts Exceeded. Failed Verifying Application Deployment..."
           exit 1
         fi
-        
+
         sleep \$DELAY
 
       done
