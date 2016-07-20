@@ -1,11 +1,22 @@
 #!/bin/bash
 
-export USER_ID=$(id -u)
-export GROUP_ID=$(id -g)
-envsubst < ${HOME}/passwd.template > ${HOME}/passwd
-export LD_PRELOAD=libnss_wrapper.so
-export NSS_WRAPPER_PASSWD=${HOME}/passwd
-export NSS_WRAPPER_GROUP=/etc/group
+# Set current user in nss_wrapper
+USER_ID=$(id -u)
+GROUP_ID=$(id -g)
+
+if [ x"$USER_ID" != x"0" -a x"$USER_ID" != x"1001" ]; then
+
+    NSS_WRAPPER_PASSWD=/tmp/nss_passwd
+    NSS_WRAPPER_GROUP=/etc/group
+
+    cat /etc/passwd | sed -e 's/^default:/builder:/' > $NSS_WRAPPER_PASSWD
+
+    echo "default:x:${USER_ID}:${GROUP_ID}:Default Application User:${HOME}:/sbin/nologin" >> $NSS_WRAPPER_PASSWD
+
+    export NSS_WRAPPER_PASSWD
+    export NSS_WRAPPER_GROUP
+    export LD_PRELOAD=libnss_wrapper.so
+fi
 
 JAR="/opt/jenkins-agent/bin/agent.jar"
 

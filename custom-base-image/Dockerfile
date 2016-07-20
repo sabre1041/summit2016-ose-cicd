@@ -8,7 +8,7 @@ MAINTAINER Andrew Block <andy.block@gmail.com>
 
 EXPOSE 8080 8888
 
-ENV MAVEN_VERSION 3.3.3
+ENV MAVEN_VERSION 3.3.9
 
 LABEL io.k8s.description="Platform for building and running JEE applications on WildFly Swarm" \
       io.k8s.display-name="WildFly Swarm" \
