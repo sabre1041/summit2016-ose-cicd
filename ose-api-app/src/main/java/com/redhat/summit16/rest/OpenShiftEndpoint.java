@@ -91,7 +91,7 @@ public class OpenShiftEndpoint {
 	  DeploymentConfig origDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).get();
 	  Integer replicas = origDc.getSpec().getReplicas();
 
-	  DeploymentConfig updatedDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).edit().editSpec().withReplicas(replicas++).endSpec().done();
+	  DeploymentConfig updatedDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).edit().editSpec().withReplicas(++replicas).endSpec().done();
 
 	  return updatedDc;
 
@@ -108,7 +108,7 @@ public class OpenShiftEndpoint {
 	  Integer replicas = origDc.getSpec().getReplicas();
 
 	  if (replicas > 0) {
-		  DeploymentConfig updatedDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).edit().editSpec().withReplicas(replicas--).endSpec().done();
+		  DeploymentConfig updatedDc = getClient().deploymentConfigs().inNamespace(getPodNamespace()).withName(deploymentConfigName).edit().editSpec().withReplicas(--replicas).endSpec().done();
 		  return updatedDc;
 	  }
   
