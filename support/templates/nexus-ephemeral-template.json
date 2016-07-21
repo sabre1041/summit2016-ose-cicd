@@ -78,16 +78,7 @@
                         "kind": "ImageStreamTag",
                         "name": "${APPLICATION_NAME}:latest"
                     }
-                },
-                "triggers": [
-		            {
-		                "type": "ConfigChange"
-		            },
-                    {
-                        "type": "ImageChange",
-                        "imageChange": {}
-                    }
-                ]
+                }
             }
 		},
         {

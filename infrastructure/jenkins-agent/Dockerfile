@@ -20,7 +20,7 @@ RUN yum clean all && \
       && ln -s /usr/share/maven/bin/mvn /usr/bin/mvn
 
 # Copy script
-COPY config/jenkins-agent.sh config/settings.xml config/passwd.template /opt/jenkins-agent/
+COPY config/jenkins-agent.sh config/settings.xml /opt/jenkins-agent/
 
 # Download JNLP Client, move configurations/scripts and modify permissions
 RUN mv /opt/jenkins-agent/jenkins-agent.sh /opt/jenkins-agent/bin && \
