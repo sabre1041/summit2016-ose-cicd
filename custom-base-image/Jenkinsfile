@@ -2,6 +2,7 @@ node('ose-agent') {
     
     env.KUBECONFIG = pwd() + "/.kubeconfig"
     def baseImageProject = "custom-base-image"
+    def enterpriseResourcesProject = "enterprise-resources"
     def baseImage = "custom-base-image"
     def WORKSPACE = pwd()
     
@@ -44,7 +45,7 @@ node('ose-agent') {
         set +x
         oc tag ${baseImageProject}/${baseImage}:${buildVersion} ${baseImageProject}/${baseImage}:${finalTagVersion}
         
-        oc tag ${baseImageProject}/${baseImage}:${finalTagVersion} openshift/${baseImage}:${finalTagVersion}
+        oc tag ${baseImageProject}/${baseImage}:${finalTagVersion} ${enterpriseResourcesProject}/${baseImage}:${finalTagVersion}
       """
 }
 

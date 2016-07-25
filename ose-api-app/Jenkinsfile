@@ -1,12 +1,15 @@
+
+def appName = "ose-api-app"
+def devProject = "api-app-dev"
+def uatProject = "api-app-uat"
+def prodProject = "api-app-prod"
+def version
+
 node('ose-agent') {
 
     def WORKSPACE = pwd()
     def mvnHome = tool 'maven'
     env.KUBECONFIG = pwd() + "/.kubeconfig"
-    def appName = "ose-api-app"
-    def devProject = "api-app-dev"
-    def uatProject = "api-app-uat"
-    def prodProject = "api-app-prod"
 
    stage 'Checkout'
 
@@ -33,24 +36,24 @@ node('ose-agent') {
 
       stage "OpenShift Dev Build"
 
-      def version = parseVersion("${WORKSPACE}/pom.xml")
+        version = parseVersion("${WORKSPACE}/pom.xml")
 
-      login()
+        login()
 
-      sh """
-       set +x
+        sh """
+         set +x
 
-       currentOutputName=\$(oc get bc ${appName} -n ${devProject} --template='{{ .spec.output.to.name }}')
+         currentOutputName=\$(oc get bc ${appName} -n ${devProject} --template='{{ .spec.output.to.name }}')
 
-       newImageName=\${currentOutputName%:*}:${version}
+         newImageName=\${currentOutputName%:*}:${version}
 
-       oc patch bc ${appName} -n ${devProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
+         oc patch bc ${appName} -n ${devProject} -p "{ \\"spec\\": { \\"output\\": { \\"to\\": { \\"name\\": \\"\${newImageName}\\" } } } }"
 
-       mkdir -p ${WORKSPACE}//target/s2i-build/deployments
-       cp ${WORKSPACE}//target/*.jar ${WORKSPACE}//target/s2i-build/deployments/
-       oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir="${WORKSPACE}//target/s2i-build"
+         mkdir -p ${WORKSPACE}//target/s2i-build/deployments
+         cp ${WORKSPACE}//target/*.jar ${WORKSPACE}//target/s2i-build/deployments/
+         oc start-build ${appName} -n ${devProject} --follow=true --wait=true --from-dir="${WORKSPACE}//target/s2i-build"
 
-      """
+       """
 
       stage "Dev Deployment"
 
@@ -83,10 +86,17 @@ node('ose-agent') {
     stage "Acceptance Checking"
 
         acceptanceCheck(appName, uatProject)
+}
 
     stage "Promote to Production"
 
       input "Do you want to promote the ${appName} to Production?"
+
+node('ose-agent') {
+
+    def WORKSPACE = pwd()
+    def mvnHome = tool 'maven'
+    env.KUBECONFIG = pwd() + "/.kubeconfig"
 
       login()
 

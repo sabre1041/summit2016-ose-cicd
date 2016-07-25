@@ -9,7 +9,7 @@
     <imageStreamName>base-centos</imageStreamName>
     <tag>latest</tag>
     <apiURL>https://kubernetes.default.svc.cluster.local</apiURL>
-    <namespace>openshift</namespace>
+    <namespace>custom-base-image</namespace>
     <authToken></authToken>
     <verbose>false</verbose>
   </scm>

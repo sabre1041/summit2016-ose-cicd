@@ -15,6 +15,8 @@ OSE_CI_PROJECT="ci"
 OSE_API_APP_DEV="api-app-dev"
 OSE_API_APP_UAT="api-app-uat"
 OSE_API_APP_PROD="api-app-prod"
+OSE_ENTERPRISE_RESOURCES="enterprise-resources"
+SHARED_RESOURCES_ROLE="shared-resource-viewer"
 
 
 POSTGRESQL_USER="postgresql"
@@ -80,6 +82,12 @@ echo "Creating new CI Project (${OSE_CI_PROJECT})..."
 echo
 oc new-project ${OSE_CI_PROJECT} >/dev/null 2>&1
 
+# Create Enterprise Resources Project
+echo
+echo "Creating new Enterprise Resources Project (${OSE_ENTERPRISE_RESOURCES})..."
+echo
+oc new-project ${OSE_ENTERPRISE_RESOURCES} >/dev/null 2>&1
+
 # Create Custom Base Image Project
 echo
 echo "Creating new Custom Base Image Project (${CUSTOM_BASE_IMAGE_PROJECT})..."
@@ -105,6 +113,11 @@ echo
 oc new-project ${OSE_API_APP_PROD} >/dev/null 2>&1
 
 echo
+echo "Setting up Enterprise Resources Roles..."
+echo
+oc process -f "$SCRIPT_BASE_DIR/support/templates/shared-resource-template.json" -v=NAMESPACE=${OSE_ENTERPRISE_RESOURCES},ROLE_NAME=${SHARED_RESOURCES_ROLE} | oc -n ${OSE_ENTERPRISE_RESOURCES} create -f- >/dev/null 2>&1
+
+echo
 echo "Configuring project permissions..."
 echo
 
@@ -114,7 +127,7 @@ oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default 
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_API_APP_DEV}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_API_APP_UAT}
 oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_API_APP_PROD}
-oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n openshift
+oc policy add-role-to-user edit system:serviceaccount:${OSE_CI_PROJECT}:default -n ${OSE_ENTERPRISE_RESOURCES}
 
 # Grant Default Service Account in Each Project Editt Access
 oc policy add-role-to-user edit system:serviceaccount:${OSE_API_APP_DEV}:default -n ${OSE_API_APP_DEV}
@@ -148,22 +161,16 @@ echo "Processing Nexus Template..."
 echo
 oc process -v APPLICATION_NAME=nexus -f "${SCRIPT_BASE_DIR}/support/templates/nexus-ephemeral-template.json" | oc -n ${OSE_CI_PROJECT} create -f - >/dev/null 2>&1
 
-echo
-echo "Waiting for Nexus build to begin..."
-echo
-wait_for_running_build "nexus" "${OSE_CI_PROJECT}"
-
-# Cancel initial build since this is a binary build with no content
-oc cancel-build -n ${OSE_CI_PROJECT} nexus-1 >/dev/null 2>&1
+sleep 5
 
 echo
 echo "Starting Nexus binary build..."
 echo
 oc start-build -n ${OSE_CI_PROJECT} nexus --from-dir="${SCRIPT_BASE_DIR}/infrastructure/nexus" >/dev/null 2>&1
 
-wait_for_running_build "nexus" "${OSE_CI_PROJECT}" "2"
+wait_for_running_build "nexus" "${OSE_CI_PROJECT}"
 
-oc build-logs -n ${OSE_CI_PROJECT} -f nexus-2 
+oc build-logs -n ${OSE_CI_PROJECT} -f nexus-1
 
 
 echo
@@ -294,22 +301,12 @@ echo "Instantiating the base builder and associated dependencies in the ${CUSTOM
 echo
 oc process -f "$SCRIPT_BASE_DIR/support/templates/custom-base-image-template.json" | oc -n ${CUSTOM_BASE_IMAGE_PROJECT} create -f- >/dev/null 2>&1
 
+sleep 5
+
 echo
 echo "Importing upstream OpenShift Base Centos 7 Image..."
 echo
 oc import-image base-centos -n ${CUSTOM_BASE_IMAGE_PROJECT} >/dev/null 2>&1
-
-echo
-echo "Waiting for custom base image build to begin..."
-echo
-wait_for_running_build "custom-base-image" "${CUSTOM_BASE_IMAGE_PROJECT}"
-
-# Cancel initial build since this is a binary build with no content
-echo
-echo "Cancelling initial custom base image build..."
-echo
-oc cancel-build custom-base-image-1 -n ${CUSTOM_BASE_IMAGE_PROJECT} >/dev/null 2>&1
-
 
 
 oc project ${OSE_API_APP_DEV} >/dev/null 2>&1
@@ -317,7 +314,7 @@ oc project ${OSE_API_APP_DEV} >/dev/null 2>&1
 echo
 echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_DEV} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=CUSTOM_BASE_IMAGE_TAG=1.0,APPLICATION_NAME=ose-api-app | oc -n ${OSE_API_APP_DEV} create -f- >/dev/null 2>&1
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=CUSTOM_BASE_IMAGE_TAG=1.0,APPLICATION_NAME=ose-api-app,IMAGE_STREAM_NAMESPACE=${OSE_ENTERPRISE_RESOURCES},IMAGE_STREAM_NAMESPACE=${OSE_ENTERPRISE_RESOURCES} | oc -n ${OSE_API_APP_DEV} create -f- >/dev/null 2>&1
 
 
 oc project ${OSE_API_APP_UAT} >/dev/null 2>&1
@@ -325,7 +322,7 @@ oc project ${OSE_API_APP_UAT} >/dev/null 2>&1
 echo
 echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_UAT} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app | oc create -n ${OSE_API_APP_UAT} -f-  >/dev/null 2>&1
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app,IMAGE_STREAM_NAMESPACE=${OSE_ENTERPRISE_RESOURCES} | oc create -n ${OSE_API_APP_UAT} -f-  >/dev/null 2>&1
 
 # Delete BuildConfig object as it is not needed in this project
 echo
@@ -339,7 +336,7 @@ oc project ${OSE_API_APP_PROD} >/dev/null 2>&1
 echo
 echo "Instantiating the application and associated dependencies in the ${OSE_API_APP_PROD} project..."
 echo
-oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app | oc create -n ${OSE_API_APP_PROD} -f- >/dev/null 2>&1
+oc process -f "$SCRIPT_BASE_DIR/support/templates/app-template.json" -v=APPLICATION_NAME=ose-api-app,IMAGE_STREAM_NAMESPACE=${OSE_ENTERPRISE_RESOURCES} | oc create -n ${OSE_API_APP_PROD} -f- >/dev/null 2>&1
 
 # Delete BuildConfig object as it is not needed in this project
 echo
